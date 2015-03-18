@@ -8,6 +8,7 @@
 #include <string.h>
 
 #define BUFLEN 256
+#define DEFAULT_PORT 80
 
 int main(int argc, char **argv) {
 
@@ -68,6 +69,7 @@ int main(int argc, char **argv) {
 	char *checker = NULL;
 	char *http = NULL;
 	char *path = NULL;
+	char *ver = NULL;
 
     while((n = read(new_sd, bp, bytes_to_read)) > 0) {
       if (*bp == '\n') {
@@ -78,19 +80,57 @@ int main(int argc, char **argv) {
 	  if (checker != bp){
 		  printf("405\n");
 	  } else {
+		  // get the pointer to http://
 		  http = strstr(bp, "http://");
-		  http += 7;
-		  path = strstr(http, "/");
 		  
+		  // get pointer to HTTPver
+		  ver = strstr(bp, "HTTP");
+		  
+		  // get the pointer to absPath
+		  http += 7;
+		  if (strstr(http, "/") > ver) {
+			  path = strstr(http, " ");
+		  }else {
+			  path = strstr(http, "/");
+		  }
+		  
+		  // Check statements
 		  printf("Check bp: %s\n", bp);
 		  printf("check http: %s\n", http);
-		  printf("check /: %s\n", path);
+		  printf("check HTTP: %s\n", ver);
+		  printf("check path: %s\n", path);
 		  
-		  printf("check http: %d\n", &http);
+		  // get the host
+		  int hlen = (path - http) + 1;
+		  char *host = malloc(hlen * sizeof(char));
+		  strncpy(host, http, hlen-1);
+		  host[hlen] = 0;
 		  
-		  printf("check /: %d\n", &path);
+		  // get the HTTPver
+		  int vlen = strrchr(bp, '\0') - ver;
+		  char *httpVer = malloc(vlen * sizeof(char));
+		  strcpy(httpVer, ver);
+		  httpVer[vlen] = 0;
 		  
-		  printf("check host: %d\n", &http-&path);
+		  // get the absPath
+		  // if it's empty, then should be "/"
+		  int plen = (ver - path);
+		  char *absPath = malloc(plen * sizeof(char));
+		  strncpy(absPath, path, plen);
+		  absPath[plen] = 0;
+		  if (absPath[0] == ' '){
+			  absPath[0] = '/';
+		  }
+		  
+		  // Check statements
+		  printf("check host: %s\n", host);
+		  printf("check absPath: %s\n", absPath);
+		  printf("check HTTPver: %s\n", httpVer);
+		  
+		  //GET http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
+		  //GET http://www.check.com/file/path HTTP/1.3  
+		  //GET http://www.check.com HTTP/1.3  
+		  
 	  }
 	  
 	  // http:// host restofURL [port] HTTPver
