@@ -76,15 +76,20 @@ int main(int argc, char **argv) {
         break;
       }
 	  
-	  checker = strstr(bp, "GET");
+	  // get pointer to HTTPver
+	  ver = strstr(bp, "HTTP");
+	  // get the HTTPver
+	  int vlen = strrchr(bp, '\0') - ver - 1;
+	  char *httpVer = malloc(vlen * sizeof(char));
+	  strcpy(httpVer, ver);
+	  httpVer[vlen] = 0;
+	  
+	  checker = strstr(bp, "GET"); 
 	  if (checker != bp){
-		  printf("405\n");
+		  printf("%s 405 Method not allowed.\n", httpVer);
 	  } else {
 		  // get the pointer to http://
 		  http = strstr(bp, "http://");
-		  
-		  // get pointer to HTTPver
-		  ver = strstr(bp, "HTTP");
 		  
 		  // get the pointer to absPath
 		  http += 7;
@@ -95,22 +100,16 @@ int main(int argc, char **argv) {
 		  }
 		  
 		  // Check statements
-		  printf("Check bp: %s\n", bp);
+		  /*printf("Check bp: %s\n", bp);
 		  printf("check http: %s\n", http);
 		  printf("check HTTP: %s\n", ver);
-		  printf("check path: %s\n", path);
+		  printf("check path: %s\n", path);*/
 		  
 		  // get the host
 		  int hlen = (path - http) + 1;
 		  char *host = malloc(hlen * sizeof(char));
 		  strncpy(host, http, hlen-1);
 		  host[hlen] = 0;
-		  
-		  // get the HTTPver
-		  int vlen = strrchr(bp, '\0') - ver;
-		  char *httpVer = malloc(vlen * sizeof(char));
-		  strcpy(httpVer, ver);
-		  httpVer[vlen] = 0;
 		  
 		  // get the absPath
 		  // if it's empty, then should be "/"
@@ -123,13 +122,16 @@ int main(int argc, char **argv) {
 		  }
 		  
 		  // Check statements
-		  printf("check host: %s\n", host);
+		  /*printf("check host: %s\n", host);
 		  printf("check absPath: %s\n", absPath);
-		  printf("check HTTPver: %s\n", httpVer);
+		  printf("check HTTPver: %s\n", httpVer);*/
+		  
+		  printf("GET %s %s \nHOST: %s\n", absPath, httpVer, host);
 		  
 		  //GET http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
 		  //GET http://www.check.com/file/path HTTP/1.3  
 		  //GET http://www.check.com HTTP/1.3  
+		  //POST http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
 		  
 	  }
 	  
