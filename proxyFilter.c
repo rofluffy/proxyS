@@ -28,6 +28,10 @@ int main(int argc, char **argv) {
   char *bp, buf[BUFLEN], outbuf[BUFLEN];
 
   // running start up (have 2 argument, so one more to implement)
+  /*if (argc != 3){
+	  fprintf(stderr, "Usage: %s [port] %s [blacklist]\n", argv[0]);
+      exit(1);
+  }*/
   if (argc != 2){
 	  fprintf(stderr, "Usage: %s [port]\n", argv[0]);
       exit(1);
@@ -54,7 +58,6 @@ int main(int argc, char **argv) {
 
   /* Receive from the client. */
   listen(sd, 5);
-  printf("Check before the while loop.\n");
   while (1) {
     memset(buf, 0, sizeof(buf));
     if ((new_sd = accept(sd, (struct sockaddr *)&client, &client_len)) == -1) {
@@ -77,18 +80,12 @@ int main(int argc, char **argv) {
       }
 	  
 	  // get pointer to HTTPver
-	  ver = strstr(bp, "HTTP");
-	  // get the HTTPver
-	  int vlen = strrchr(bp, '\0') - ver - 1;
-	  char *httpVer = malloc(vlen * sizeof(char));
-	  strcpy(httpVer, ver);
-	  httpVer[vlen] = 0;
-	  
+	  ver = strstr(bp, "HTTP/1.1");
+ 
 	  checker = strstr(bp, "GET"); 
-	  if (checker != bp){
-		  printf("%s 405 Method not allowed.\n", httpVer);
-	  } else {
-		  // get the pointer to http://
+	  
+	  if ((checker == bp) && ver != NULL){
+		   // get the pointer to http://
 		  http = strstr(bp, "http://");
 		  
 		  // get the pointer to absPath
@@ -99,13 +96,8 @@ int main(int argc, char **argv) {
 			  path = strstr(http, "/");
 		  }
 		  
-		  // Check statements
-		  /*printf("Check bp: %s\n", bp);
-		  printf("check http: %s\n", http);
-		  printf("check HTTP: %s\n", ver);
-		  printf("check path: %s\n", path);*/
-		  
 		  // get the host
+		  // if port exist, then extract it
 		  int hlen = (path - http) + 1;
 		  char *host = malloc(hlen * sizeof(char));
 		  strncpy(host, http, hlen-1);
@@ -121,18 +113,29 @@ int main(int argc, char **argv) {
 			  absPath[0] = '/';
 		  }
 		  
+		  // get the HTTPver
+		  int vlen = strrchr(bp, '\0') - ver - 1;
+		  char *httpVer = malloc(vlen * sizeof(char));
+		  strcpy(httpVer, ver);
+		  httpVer[vlen] = 0;
+		  
+		  
 		  // Check statements
 		  /*printf("check host: %s\n", host);
 		  printf("check absPath: %s\n", absPath);
 		  printf("check HTTPver: %s\n", httpVer);*/
 		  
-		  printf("GET %s %s \nHOST: %s\n", absPath, httpVer, host);
+		  // create new socket on HOST, [port]
+		  // send "GET absPath httpver" request to the socket
+		  // get response
 		  
-		  //GET http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
-		  //GET http://www.check.com/file/path HTTP/1.3  
-		  //GET http://www.check.com HTTP/1.3  
-		  //POST http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
 		  
+		  
+		  printf("GET %s %s\nHOST: %s\n", absPath, httpVer, host);
+		  
+	  } else {
+		 
+		  printf("HTTP/1.1 405 Method not allowed.\n");
 	  }
 	  
 	  // http:// host restofURL [port] HTTPver
