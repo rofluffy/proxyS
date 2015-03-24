@@ -26,6 +26,8 @@ int main(int argc, char **argv) {
   int sd, new_sd, client_len, port;
   struct sockaddr_in server, client;
   char *bp, buf[BUFLEN], outbuf[BUFLEN];
+  
+  struct hostent* host;
 
   // running start up (have 2 argument, so one more to implement)
   /*if (argc != 3){
@@ -68,11 +70,20 @@ int main(int argc, char **argv) {
 
     bp = buf;
     bytes_to_read = BUFLEN;
-    int i = 0;
 	char *checker = NULL;
 	char *http = NULL;
 	char *path = NULL;
 	char *ver = NULL;
+	
+	struct sockaddr_in host_addr;
+	int hostsd, new_hostsd, i; 
+	
+	char request[BUFLEN];
+	char response[BUFLEN];
+	char *rp;
+	char respondCode[4];
+	char *token;
+	
 
     while((n = read(new_sd, bp, bytes_to_read)) > 0) {
       if (*bp == '\n') {
@@ -99,9 +110,10 @@ int main(int argc, char **argv) {
 		  // get the host
 		  // if port exist, then extract it
 		  int hlen = (path - http) + 1;
-		  char *host = malloc(hlen * sizeof(char));
-		  strncpy(host, http, hlen-1);
-		  host[hlen] = 0;
+		  char *hostname = malloc(hlen * sizeof(char));
+		  strncpy(hostname, http, hlen-1);
+		  hostname[hlen] = 0;
+		  host = gethostbyname(hostname);
 		  
 		  // get the absPath
 		  // if it's empty, then should be "/"
@@ -120,18 +132,78 @@ int main(int argc, char **argv) {
 		  httpVer[vlen] = 0;
 		  
 		  
+		  printf("GET %s %s\nHOST: %s\n", absPath, httpVer, hostname);
+		  
 		  // Check statements
 		  /*printf("check host: %s\n", host);
 		  printf("check absPath: %s\n", absPath);
 		  printf("check HTTPver: %s\n", httpVer);*/
 		  
 		  // create new socket on HOST, [port]
+		  /* Bind host address to the socket */
+		  bzero((char*) &host_addr, sizeof(host_addr));
+		  memset((char *) &host_addr, 0, sizeof(struct sockaddr_in));
+		  host_addr.sin_family = AF_INET;
+		  // if port exist, use that instead of default
+		  host_addr.sin_port = htons(DEFAULT_PORT);  
+		  bcopy((char*)host->h_addr,(char*)&host_addr.sin_addr.s_addr,host->h_length);
+		  //host_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+		  
+		  /* Create a stream socket. */
+		  if ((hostsd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+			  fprintf(stderr, "Can't create host socket.\n");
+			  //exit(1);
+		  }
+		  
+		  if ((new_hostsd = connect(hostsd, (struct sockaddr*)&host_addr, sizeof(struct sockaddr))) == -1) {
+			  fprintf(stderr, "Can't connect to remote server.\n");
+			  //exit(1);
+		  }  
+		  
 		  // send "GET absPath httpver" request to the socket
+		  //sprintf(request, "GET %s %s\r\nHOST: %s\r\nConnection: close\r\n\r\n", absPath, httpVer, hostname);
+		  bzero((char*)request,sizeof(request));
+		  sprintf(request, "GET %s %s\r\nHOST: %s\r\n\r\n", absPath, httpVer, hostname);
+		  i = send(hostsd, request, strlen(request), 0);
+		  printf("\n%s\n", request);
+		  
+		  if (i < 0){
+			  fprintf(stderr, "Can't write to socket.\n");
+		  } else {
+			  do {
+				  bzero((char*)response,strlen(response));
+				  i = recv(hostsd, response, BUFLEN, 0);
+				  //response[strlen(response)] = 0;
+				  /*if (response == strstr(response, httpVer)){
+					  char* temp = (char*) malloc(sizeof(response));
+					  strcpy(temp, response);
+					  token = strtok(temp, " ");
+					  while( token != NULL ) {
+						  printf("try: %s\n", token);
+						  token = strtok(NULL, " ");
+					  }
+				  }*/
+				  if (!(i <= 0)){
+					  // print response
+					  send(new_hostsd, response, strlen(response), 0);
+				  }
+				  response[strlen(response)] = 0;
+				  printf("%s", response);
+				  
+			  } while(i > 0);
+		  }
 		  // get response
+		  //printf("\nResponse: %s\n", response);
+		  //fprintf(stdout, "\nResponse: %s\n", response);
 		  
+		  // clean up
+		  free(hostname);
+		  free(absPath);
+		  free(httpVer);
 		  
-		  
-		  printf("GET %s %s\nHOST: %s\n", absPath, httpVer, host);
+		  // close connection
+		  close(hostsd);
+		  close(new_hostsd);
 		  
 	  } else {
 		 
@@ -143,6 +215,7 @@ int main(int argc, char **argv) {
 	  
       bp += n;
       bytes_to_read -= n;
+	  
 	  
     }
 
