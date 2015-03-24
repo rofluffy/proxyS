@@ -12,15 +12,6 @@
 
 int main(int argc, char **argv) {
 
-    // This is some sample code feel free to delete it
-
-    /*int i;
-
-    for (i = 0; i < argc; i++) {
-        printf("Arg %d is: %s\n", i, argv[i]);
-    }
-
-    return 0;*/
 	
   int n, bytes_to_read;
   int sd, new_sd, client_len, port;
@@ -50,32 +41,29 @@ int main(int argc, char **argv) {
     exit(1);
   }
   
-  printf("Before listen. \n");
 
   /* Receive from the client. */
   listen(sd, 5);
-  printf("Check before the while loop.\n");
   while (1) {
     memset(buf, 0, sizeof(buf));
     if ((new_sd = accept(sd, (struct sockaddr *)&client, &client_len)) == -1) {
       fprintf(stderr, "Can't accept client.\n");
       exit(1);
     }
-	printf("after new_sd if statement\n");
 
     bp = buf;
     bytes_to_read = BUFLEN;
-    int i = 0;
 	char *checker = NULL;
 	char *http = NULL;
 	char *path = NULL;
 	char *ver = NULL;
+	char *host = NULL;
 
     while((n = read(new_sd, bp, bytes_to_read)) > 0) {
       if (*bp == '\n') {
         break;
       }
-	  
+	  /*
 	  // get pointer to HTTPver
 	  ver = strstr(bp, "HTTP");
 	  // get the HTTPver
@@ -83,16 +71,21 @@ int main(int argc, char **argv) {
 	  char *httpVer = malloc(vlen * sizeof(char));
 	  strcpy(httpVer, ver);
 	  httpVer[vlen] = 0;
-	  
+	*/
+	  char *httpVer = NULL;
+	  char *ver = NULL;
+
+
+
+
 	  checker = strstr(bp, "GET"); 
-	  if (checker != bp){
+	  if (strncmp(bp, "GET", 3) != 0){
 		  printf("%s 405 Method not allowed.\n", httpVer);
-	  } else {
+	  } else if (strncmp(bp, "GET http://", 11) == 0){
 		  // get the pointer to http://
-		  http = strstr(bp, "http://");
-		  
-		  // get the pointer to absPath
-		  http += 7;
+		  http = strstr(bp, "http://") + 7;
+		  path = strstr(http, "/");
+		  /*
 		  if (strstr(http, "/") > ver) {
 			  path = strstr(http, " ");
 		  }else {
@@ -106,11 +99,21 @@ int main(int argc, char **argv) {
 		  printf("check path: %s\n", path);*/
 		  
 		  // get the host
-		  int hlen = (path - http) + 1;
-		  char *host = malloc(hlen * sizeof(char));
+		  size_t hlen = (path - http) + 1;
+		  host = malloc(hlen * sizeof(char));
 		  strncpy(host, http, hlen-1);
 		  host[hlen] = 0;
+
 		  
+		  ver = strstr(path, " ");
+		  
+
+	  } else {
+	  	printf("Error in URL.\n");
+	  } if (strncmp(ver, " HTTP/1.1", 8) == 0){
+	  	int vlen = strrchr(bp, '\0') - ver - 1;
+	  	  char *httpVer = malloc(vlen * sizeof(char));
+	  	  strcpy(httpVer, ver);
 		  // get the absPath
 		  // if it's empty, then should be "/"
 		  int plen = (ver - path);
@@ -120,20 +123,32 @@ int main(int argc, char **argv) {
 		  if (absPath[0] == ' '){
 			  absPath[0] = '/';
 		  }
-		  
-		  // Check statements
-		  /*printf("check host: %s\n", host);
-		  printf("check absPath: %s\n", absPath);
-		  printf("check HTTPver: %s\n", httpVer);*/
-		  
 		  printf("GET %s %s \nHOST: %s\n", absPath, httpVer, host);
-		  
-		  //GET http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
-		  //GET http://www.check.com/file/path HTTP/1.3  
-		  //GET http://www.check.com HTTP/1.3  
-		  //POST http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
-		  
+
+		  struct addrinfo *servinfo;
+		  struct addrinfo hints;
+		  memset(&hints, 0, sizeof hints);
+    	  hints.ai_family = AF_INET; // AF_INET or AF_INET6 to force version
+    	  hints.ai_socktype = SOCK_STREAM;
+		  int status;
+		  if ((status = getaddrinfo(host, "80", NULL, &servinfo)) != 0) {
+    		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+    		exit(1);
+		}
+		int hostsd;
+		if ((hostsd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    		fprintf(stderr, "Can't create a socket.\n");
+    		exit(1);
+    	}
+
+    	connect(hostsd, (const struct addrinfo *)servinfo, servinfo->ai_addrlen);
+
+
+
+	  } else {
+	  	printf("Error in version.\n");
 	  }
+
 	  
 	  // http:// host restofURL [port] HTTPver
 	  // HTTPver 405 Method not allowed
