@@ -10,6 +10,15 @@
 #define BUFLEN 256
 #define DEFAULT_PORT 80
 
+char* str_to_lower(char* str){
+	// to lower
+	size_t i, len= strlen(str);
+	for (i = 0; i<len; i++){
+		str[i] = tolower((unsigned char) str[i]);
+	}
+	return str;
+}
+
 int main(int argc, char **argv) {
 
     // This is some sample code feel free to delete it
@@ -26,6 +35,8 @@ int main(int argc, char **argv) {
   int sd, new_sd, client_len, port;
   struct sockaddr_in server, client;
   char *bp, buf[BUFLEN], outbuf[BUFLEN];
+  
+  char* err_msg;
 
   // running start up (have 2 argument, so one more to implement)
   /*if (argc != 3){
@@ -53,8 +64,6 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Can't bind name to socket.\n");
     exit(1);
   }
-  
-  printf("Before listen. \n");
 
   /* Receive from the client. */
   listen(sd, 5);
@@ -64,7 +73,8 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Can't accept client.\n");
       exit(1);
     }
-	printf("after new_sd if statement\n");
+	
+	printf("\n-------Reserve connection-------\n\n");
 
     bp = buf;
     bytes_to_read = BUFLEN;
@@ -80,7 +90,11 @@ int main(int argc, char **argv) {
 	  char *path = NULL;
 	  char *ver = NULL;
 	  char *flag = NULL;
-	  char *port = NULL;
+	  
+	  char *hostname = NULL;
+	  char *absPath = NULL;
+	  char *httpVer = NULL;
+	  char *hostport = NULL;
 	
 	  struct sockaddr_in host_addr;
 	  int hostsd, new_hostsd, i; 
@@ -113,17 +127,15 @@ int main(int argc, char **argv) {
 		  // get the host
 		  // if port exist, then extract it
 		  int hlen = (path - http)+1;
-		  char *hostname = malloc(hlen * sizeof(char));
-		  //bzero((char*) hostname, sizeof(hostname));
-		  printf("check hlen: %d\n", hlen);
+		  hostname = malloc(hlen * sizeof(char));
 		  strncpy(hostname, http, hlen-1);
 		  flag = strstr(hostname, ":");
 		  if (flag != NULL){
 			  int portlen = hostname + hlen - flag;
-			  port = malloc(portlen * sizeof(char));
-			  strncpy(port, flag+1, portlen);
+			  hostport = malloc(portlen * sizeof(char));
+			  strncpy(hostport, flag+1, portlen);
 			  if (portlen > 2){
-				  portNum = atoi(port);
+				  portNum = atoi(hostport);
 			  }
 			  hostname = strtok(hostname, ":");
 		  }
@@ -133,7 +145,7 @@ int main(int argc, char **argv) {
 		  // get the absPath
 		  // if it's empty, then should be "/"
 		  int plen = (ver - path);
-		  char *absPath = malloc(plen * sizeof(char));
+		  absPath = malloc(plen * sizeof(char));
 		  //bzero((char*) absPath, sizeof(absPath));
 		  strncpy(absPath, path, plen);
 		  absPath[plen] = 0;
@@ -143,7 +155,7 @@ int main(int argc, char **argv) {
 		  
 		  // get the HTTPver
 		  int vlen = strrchr(bp, '\0') - ver - 1;
-		  char *httpVer = malloc(vlen * sizeof(char));
+		  httpVer = malloc(vlen * sizeof(char));
 		  //bzero((char*) httpVer, sizeof(httpVer));
 		  strcpy(httpVer, ver);
 		  httpVer[vlen] = 0;
@@ -154,20 +166,14 @@ int main(int argc, char **argv) {
 		  /*printf("check host: %s\n", host);
 		  printf("check absPath: %s\n", absPath);
 		  printf("check HTTPver: %s\n", httpVer);*/
-		  //printf("check (0)");
 		  // create new socket on HOST, [port]
 		  /* Bind host address to the socket */
 		  memset((char *) &host_addr, 0, sizeof(struct sockaddr_in));
-		  //printf("check (1)");
 		  bzero((char*) &host_addr, sizeof(host_addr));
-		  //printf("check (2)");
 		  host_addr.sin_family = AF_INET;
-		  //printf("check (3)");
 		  // if port exist, use that instead of default
 		  host_addr.sin_port = htons(portNum);  
-		  //printf("check (4)");
 		  bcopy((char*)host->h_addr,(char*)&host_addr.sin_addr.s_addr,host->h_length);
-		  //printf("check (5)");
 		  //host_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 		  
 		  /* Create a stream socket. */
@@ -184,8 +190,8 @@ int main(int argc, char **argv) {
 		  // send "GET absPath httpver" request to the socket
 		  //sprintf(request, "GET %s %s\r\nHOST: %s\r\nConnection: close\r\n\r\n", absPath, httpVer, hostname);
 		  bzero((char*)request,sizeof(request));
-		  if (port != NULL){
-			  sprintf(request, "GET %s %s\r\nHOST: %s:%s\r\n\r\n", absPath, httpVer, hostname, port);
+		  if (hostport != NULL){
+			  sprintf(request, "GET %s %s\r\nHOST: %s:%s\r\n\r\n", absPath, httpVer, hostname, hostport);
 		  }else{
 			  sprintf(request, "GET %s %s\r\nHOST: %s\r\n\r\n", absPath, httpVer, hostname);
 		  }
@@ -209,37 +215,46 @@ int main(int argc, char **argv) {
 					  }
 				  }*/
 				  if (!(i <= 0)){
-					  // print response
-					  send(new_hostsd, response, strlen(response), 0);
+					  // print response in client
+					  response[strlen(response)] = 0;
+					  //send(new_hostsd, response, strlen(response), 0);
+					  send(new_sd, response, strlen(response), 0);
 				  }
-				  response[strlen(response)] = 0;
-				  printf("%s", response);
+				  // print response in server
+				  //printf("%s", response);
 				  
 			  } while(i > 0);
+			  char* ending = "\nConnection closing by server.\n";
+			  send(new_sd, ending, strlen(ending), 0);
+			  
 		  }
 		  // get response
 		  //printf("\nResponse: %s\n", response);
 		  //fprintf(stdout, "\nResponse: %s\n", response);
 		  
 		  // clean up
-		  bzero((char*) hostname, sizeof(hostname));
-		  bzero((char*) absPath, sizeof(absPath));
-		  bzero((char*) httpVer, sizeof(httpVer));
+		  hostname = NULL;
+		  absPath = NULL;
+		  httpVer = NULL;
+		  
 		  free(hostname);
 		  free(absPath);
 		  free(httpVer);
-		  free(port);
-		  printf("clean up freeing memory.");
+		  free(hostport);
 		  
 		  // close connection
 		  close(hostsd);
 		  close(new_hostsd);
 		  close(new_sd);
-		  printf("-------Client closing-------\n\n");
+		  printf("\n-------Closing client-------\n\n\n");
 		  
 	  } else {
 		 
-		  printf("HTTP/1.1 405 Method not allowed.\n");
+		  err_msg = "HTTP/1.1 405 Method not allowed.\n\n";
+		  send(new_sd, err_msg, strlen(err_msg), 0);
+		  printf(err_msg);
+		  printf("\n-------Closing client-------\n\n\n");
+		  close(new_sd);
 	  }
 	  
 	  // http:// host restofURL [port] HTTPver
@@ -248,18 +263,17 @@ int main(int argc, char **argv) {
       bp += n;
       bytes_to_read -= n;
 	  
-	  
     }
 
     printf("Received: %s\n", buf);
     /* Write to socket and send to the client. */
-    snprintf(outbuf, BUFLEN, "%d\n", (int) strlen(buf));
-    write(new_sd, outbuf, strlen(outbuf));
-    printf("Sent: %s\n", outbuf);
+    //snprintf(outbuf, BUFLEN, "%d\n", (int) strlen(buf));
+    //write(new_sd, outbuf, strlen(outbuf));
+    //printf("Sent: %s\n", outbuf);
 
     /* Clean up. */
-    //close(new_sd);
-	//printf("after close new_sd\n");
+	//close(new_sd);
+	//printf("\n-------Closing client-------\n\n\n");
   }
 
   close(sd);
