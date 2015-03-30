@@ -12,6 +12,7 @@
 
 char* str_to_lower(char* str){
 	// to lower
+	printf("to lower.\n");
 	size_t i, len= strlen(str);
 	for (i = 0; i<len; i++){
 		str[i] = tolower((unsigned char) str[i]);
@@ -99,15 +100,7 @@ void handler(char *hostname, int portNum, char* absPath, char* httpVer, int new_
 
 int main(int argc, char **argv) {
 
-    // This is some sample code feel free to delete it
-
-    /*int i;
-
-    for (i = 0; i < argc; i++) {
-        printf("Arg %d is: %s\n", i, argv[i]);
-    }
-
-    return 0;*/
+    // the main function
 	
   int n, bytes_to_read;
   int sd, new_sd, client_len, port;
@@ -115,17 +108,21 @@ int main(int argc, char **argv) {
   char *bp, buf[BUFLEN], outbuf[BUFLEN];
   
   char* err_msg;
+  
+  FILE *blacklist;
 
-  // running start up (have 2 argument, so one more to implement)
-  /*if (argc != 3){
-	  fprintf(stderr, "Usage: %s [port] %s [blacklist]\n", argv[0]);
-      exit(1);
-  }*/
-  if (argc != 2){
-	  fprintf(stderr, "Usage: %s [port]\n", argv[0]);
+  // usage is port, blacklist
+  if (argc != 3){
+	  fprintf(stderr, "Usage: %s [port], %s, [blacklist]\n", argv[0]);
       exit(1);
   }
   port = atoi(argv[1]);
+  blacklist = fopen(argv[2], "r");
+  if (blacklist == NULL){
+	  fprintf(stderr,"Failed to open: %s\n", argv[2]);
+	  exit(1);
+  }
+  
 
   /* Create a stream socket. */
   if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -265,9 +262,39 @@ int main(int argc, char **argv) {
 		  }
 		  
 		  printf("GET %s %s\nHOST: %s\n", absPath, httpVer, hostname);
-		  handler(hostname, portNum, absPath, httpVer, new_sd);
 		  
-		  // clean up
+		  // check the hostname and return 403 if it should be block
+		  char* blbuff = NULL;
+		  size_t k = 0;
+		  int contains_word = 0;
+		  while (getline(&blbuff, &k, blacklist) != -1){
+			  str_to_lower(blbuff);
+			  blbuff[strlen(blbuff)-1] = 0;
+			  printf("blbuff: %s, %d\n", blbuff, strlen(blbuff));
+			  printf("hostname: %s\n", hostname);
+			  printf("check pointer: %s\n", strstr(blbuff, "sfu"));
+			  if (strstr(hostname, blbuff) != NULL){
+				  printf("comparing hostname.\n");
+				  contains_word = 1;
+			  }
+		  }
+		  // set blbuff back to the start of the file
+		  free(blbuff);
+		  rewind(blacklist);
+
+		  
+		  // call handler to connect to the host
+		  if (contains_word == 0){
+			  printf("call handler.");
+			  handler(hostname, portNum, absPath, httpVer, new_sd);
+		  } else {
+			  err_msg = "HTTP/1.1 403 Forbidden.\n\n";
+			  send(new_sd, err_msg, strlen(err_msg), 0);
+			  printf(err_msg);
+		  }
+		  //handler(hostname, portNum, absPath, httpVer, new_sd);
+		  
+		  // clean up (check later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
 		  hostname = NULL;
 		  absPath = NULL;
 		  httpVer = NULL;
