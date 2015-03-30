@@ -31,6 +31,7 @@ void handler(char *hostname, int portNum, char* absPath, char* httpVer, int new_
 	
 	// get the host from host name
 	host = gethostbyname(hostname);
+	// ADD AN EXCEPTION THAT RETURNS HOST INVALID !!!!!!!!!!!!!!!!!!!!!!!
 	
 	// create new socket on HOST, [port]
 	/* Bind host address to the socket */
@@ -264,21 +265,69 @@ int main(int argc, char **argv) {
 		  printf("GET %s %s\nHOST: %s\n", absPath, httpVer, hostname);
 		  
 		  // check the hostname and return 403 if it should be block
-		  char* blbuff = NULL;
+		  char* blbuff;
 		  size_t k = 0;
 		  int contains_word = 0;
+
 		  while (getline(&blbuff, &k, blacklist) != -1){
-			  str_to_lower(blbuff);
-			  blbuff[strlen(blbuff)-1] = 0;
-			  printf("blbuff: %s, %d\n", blbuff, strlen(blbuff));
-			  printf("hostname: %s\n", hostname);
-			  printf("check pointer: %s\n", strstr(blbuff, "sfu"));
-			  if (strstr(hostname, blbuff) != NULL){
-				  printf("comparing hostname.\n");
-				  contains_word = 1;
-			  }
+			char* compare;
+		  	if (strstr(blbuff, "\n") != NULL){
+		  		int clen = strstr(blbuff, "\n") - blbuff - 1;
+		  		compare = malloc(clen * sizeof(char));
+		  		strncpy(compare, blbuff, clen);
+		  	} else {
+		  		compare = (char*) malloc(strlen(blbuff));
+		  		strcpy(compare, blbuff);
+		  	}
+		  	
+		  	printf("check compare: %s\n", compare);
+		  	printf("check lenght: %d\n", strlen(compare), compare);
+		  	printf("check null: %s and %s is %s\n", hostname, compare, strstr(hostname, compare));
+
+		  	str_to_lower(compare);
+		  	if (strstr(hostname, compare) != NULL){
+		  		printf("comparing hostname. %d\n", contains_word);
+				contains_word = 1;
+				printf("comparing hostname. (set)%d\n", contains_word);
+		  	}
+
+		  	compare = NULL;
+		  	free(compare);
 		  }
+
+		  // can be deleted ↓
+
+		  // while (fgets(blbuff, BUFLEN, blacklist) != NULL){
+		  // 	//printf("check blbuff: %s", blbuff);
+		  // 	char* compare;
+		  // 	if (strstr(blbuff, "\n") != NULL){
+		  // 		int clen = strstr(blbuff, "\n") - blbuff - 1;
+		  // 		compare = malloc(clen * sizeof(char));
+		  // 		strncpy(compare, blbuff, clen);
+		  // 	} else {
+		  // 		compare = (char*) malloc(strlen(blbuff));
+		  // 		strcpy(compare, blbuff);
+		  // 	}
+		  	
+		  // 	printf("check compare: %s\n", compare);
+		  // 	printf("check lenght: %d\n", strlen(compare), compare);
+		  // 	printf("check null: %s and %s is %s\n", hostname, compare, strstr(hostname, compare));
+
+		  // 	str_to_lower(compare);
+		  // 	if (strstr(hostname, compare) != NULL){
+		  // 		printf("comparing hostname. %d\n", contains_word);
+				// contains_word = 1;
+				// printf("comparing hostname. (set)%d\n", contains_word);
+		  // 	}
+
+		  // 	compare = NULL;
+		  // 	free(compare);
+		  // }
+
+
+
 		  // set blbuff back to the start of the file
+		  blbuff = NULL;
 		  free(blbuff);
 		  rewind(blacklist);
 
