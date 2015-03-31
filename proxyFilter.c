@@ -93,7 +93,7 @@ int checkBlacklist(char* hostname, FILE* blacklist){
 	return contains_word;
 }
 
-void handler(char *hostname, int portNum, char* absPath, char* httpVer, int new_socket){
+void handler(char *hostname, int portNum, char* absPath, char* httpVer, int new_socket, FILE * cache_file){
 	
 	struct sockaddr_in host_addr;
 	int hostsd, new_hostsd, i; 
@@ -152,8 +152,11 @@ void handler(char *hostname, int portNum, char* absPath, char* httpVer, int new_
 			if (!(i <= 0)){
 				// print response in client
 				response[strlen(response)] = 0;
-				//send(new_hostsd, response, strlen(response), 0);
 				send(new_socket, response, strlen(response), 0);
+				if (cache_file != NULL){
+					//printf("Writing: %s\n", response);
+					fprintf(cache_file, response);
+				}
 			}
 			// print response in server
 			//printf("%s", response);
@@ -169,6 +172,75 @@ void handler(char *hostname, int portNum, char* absPath, char* httpVer, int new_
 	close(hostsd);
 	close(new_hostsd);
 	
+}
+
+char * get_hash(char * key, int num_bytes){
+	unsigned char *h = (char *)malloc(sizeof(char)*num_bytes);
+	memset(h, 255, num_bytes);
+
+	char * hash = malloc(2*sizeof(char)*num_bytes+1);
+	memset(hash, 0, num_bytes);
+
+	static const unsigned char permutation_table[256] = {99, 135, 111, 62, 240, 130, 49, 81, 254, 170, 175, 116, 157, 219, 88, 190, 178, 108, 69, 138, 60, 165, 21, 70, 87, 86, 73, 198, 90, 50, 162, 233, 171, 214, 9, 218, 177, 132, 220, 180, 174, 119, 252, 125, 97, 58, 206, 234, 100, 197, 231, 200, 106, 17, 105, 112, 148, 154, 57, 236, 131, 96, 121, 210, 243, 37, 38, 30, 89, 182, 245, 22, 43, 56, 66, 51, 79, 137, 28, 217, 36, 158, 128, 230, 41, 143, 2, 150, 225, 149, 133, 110, 136, 83, 151, 205, 166, 98, 55, 102, 244, 24, 126, 95, 32, 163, 160, 141, 45, 14, 124, 29, 247, 46, 179, 33, 241, 72, 221, 48, 123, 52, 232, 191, 27, 187, 77, 127, 184, 10, 104, 117, 39, 183, 113, 202, 213, 53, 199, 207, 167, 11, 169, 249, 251, 80, 226, 186, 228, 23, 85, 61, 209, 216, 203, 7, 64, 255, 129, 65, 173, 235, 84, 147, 68, 15, 122, 212, 71, 242, 42, 44, 101, 31, 246, 134, 75, 195, 3, 155, 176, 215, 208, 237, 67, 152, 250, 91, 181, 26, 227, 54, 172, 40, 142, 8, 168, 76, 13, 94, 223, 25, 107, 63, 114, 78, 16, 103, 47, 196, 156, 109, 115, 0, 5, 189, 120, 222, 92, 74, 146, 229, 204, 59, 35, 159, 19, 145, 12, 224, 194, 253, 161, 188, 185, 239, 144, 1, 93, 164, 20, 82, 140, 153, 211, 4, 248, 193, 192, 18, 139, 34, 201, 6, 238, 118};
+	int i,j,k;
+	for (i = 0; i < num_bytes; ++i)
+	{
+		h[i] = permutation_table[(key[0]+i)%256];
+		for (j = 0; j < strlen(key); ++j)
+		{
+			h[i] = permutation_table[h[i]^key[j]]; 
+		}
+		sprintf(hash+2*i, "%x", h[i]);
+
+	}
+
+	return hash;
+}
+
+void get_data(char *hostname, int portNum, char* absPath, char* httpVer, int new_sd){
+	char * key = malloc(strlen(hostname)+strlen(absPath)+1);
+	sprintf(key, "%s%s", hostname, absPath);
+	printf("Key : %s\n", key);
+	char * hashed = get_hash(key,8);
+	printf("Hash: %s\n", hashed);
+	char * cached_fname = (char *)malloc(strlen(hashed)+7);
+	cached_fname[strlen(hashed)+6] = 0;
+	sprintf(cached_fname, "cache/%s",hashed);
+	printf("Cache name: %s\n", cached_fname);
+	FILE * cached = fopen(cached_fname, "r");
+
+	if(cached != NULL){
+		printf("Cache not NULL.\n");
+		char * buff = NULL;
+		size_t k = 0;
+		while (getline(&buff, &k, cached) != -1){
+			send(new_sd, buff, strlen(buff), 0);
+		}
+		free(buff);
+		fclose(cached);
+	} else {
+		char * cached_temp_fname = (char *)malloc(strlen(hashed)+12);
+		cached_temp_fname[strlen(hashed)+11] = 0;
+		sprintf(cached_temp_fname, "cache/temp_%s",hashed);
+		FILE * cached_temp_read = fopen(cached_temp_fname, "r");
+		if (cached_temp_read == NULL){
+			FILE * cached_temp_write = fopen(cached_temp_fname, "w");
+			printf("Cached temp NULL\n");
+			printf("%s\n", cached_temp_fname);
+
+			handler(hostname,portNum,absPath, httpVer, new_sd, cached_temp_write);
+			fclose(cached_temp_write);
+			rename(cached_temp_fname, cached_fname);
+			free(cached_temp_fname);
+		} else {
+			handler(hostname,portNum,absPath, httpVer, new_sd, NULL);
+			free(cached_temp_fname);
+		}
+	}
+
+	free(key);
+	free(hashed);
+	free(cached_fname);
 }
 
 struct client_data{
@@ -342,7 +414,7 @@ void* connectClient(void* client_args){
 		  	// call handler to connect to the host
 		  	if (contains_word == 0){
 				  printf("call handler.");
-				  handler(hostname, portNum, absPath, httpVer, client_sock);
+				  get_data(hostname, portNum, absPath, httpVer, client_sock);
 		  	} else {
 				  err_msg = "HTTP/1.1 403 Forbidden.\n\n";
 				  send(client_sock, err_msg, strlen(err_msg), 0);
