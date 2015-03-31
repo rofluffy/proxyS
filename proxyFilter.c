@@ -174,6 +174,9 @@ struct client_data{
 	int thread_id;
 	FILE* blacklist;
 	int s_sd;
+	int n_sd;
+	int client_len;
+	struct sockaddr_in * client;
 };
 
 struct client_data cd_array[NUM_THREADS];
@@ -194,15 +197,15 @@ void* connectClient(void* client_args){
 	struct sockaddr_in client;
 	int client_len, client_sock;
 
+	client = *(curr_data->client);
+	client_len = curr_data->client_len;
+	client_sock = curr_data->n_sd;
+
 	char* err_msg;
   	char bp[BUFLEN], buf[BUFLEN];
 
   	FILE* readClient;
     
-    if ((client_sock = accept(server_sock, (struct sockaddr *)&client, &client_len)) == -1) {
-      fprintf(stderr, "Can't accept client.\n");
-      exit(1);
-    }
 	
 	printf("\n-------Reserve connection-------\n\n");
 
@@ -388,8 +391,8 @@ int main(int argc, char **argv) {
 
     // the main function
 
-  int sd/*, new_sd, client_len*/, port, *client_sd, *server_sd;
-  struct sockaddr_in server/*, client*/;
+  int sd, new_sd, client_len, port, *client_sd, *server_sd;
+  struct sockaddr_in server, client;
 
   // avoid using global var so these stufffffff......
   // int n, bytes_to_read;
@@ -433,8 +436,31 @@ int main(int argc, char **argv) {
 
   /* Receive from the client. */
   listen(sd, 5);
-  //while (1) {
+  pthread_attr_t attr;
+  int curr_id = 0;
+  while(1){
 
+  	if ((new_sd = accept(sd, (struct sockaddr *)&client, &client_len)) == -1) {
+      fprintf(stderr, "Can't accept client.\n");
+      exit(1);
+    }
+    pthread_t new_thread;
+    struct client_data c_data;
+    int rc;
+    printf("creating thread......\n");
+		c_data.thread_id = ++curr_id;
+		c_data.blacklist = blacklist;
+		c_data.s_sd = sd;
+		c_data.n_sd = new_sd;
+		c_data.client = &client;
+		c_data.client_len = client_len;
+		rc = pthread_create(&new_thread, NULL, connectClient, (void*) &c_data);
+		if (rc) {
+			printf("Fail to create thread (%d)\n", rc);
+		}
+  }
+  //while (1) {
+  /*
   	pthread_t clientTheard[NUM_THREADS];
   	pthread_attr_t attr;
 
@@ -658,4 +684,3 @@ int main(int argc, char **argv) {
   return 0;
 
 }
-
