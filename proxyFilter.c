@@ -193,7 +193,6 @@ void* connectClient(void* client_args){
 	FILE* blacklist = curr_data->blacklist;
 	int server_sock = curr_data->s_sd;
 
-	// some initialize variables
 	struct sockaddr_in client;
 	int client_len, client_sock;
 
@@ -201,6 +200,7 @@ void* connectClient(void* client_args){
 	client_len = curr_data->client_len;
 	client_sock = curr_data->n_sd;
 
+	// some initialize variables
 	char* err_msg;
   	char bp[BUFLEN], buf[BUFLEN];
 
@@ -222,6 +222,7 @@ void* connectClient(void* client_args){
   	printf("check before fgets\n");
 
   	while (fgets(bp, BUFLEN, readClient) != NULL){
+  		strcat(buf, bp);
 
   		if (*bp == '\n'){
   			// close(client_sock);
@@ -260,32 +261,33 @@ void* connectClient(void* client_args){
 	  		
 	  		if (http == NULL){
 		  
-		  	// case that requires 2 lines entry
-		  	// get path pointer
-		  	path = strstr(bp, "GET ") + 4;
-		  	printf("(1)check path: %s\n", path);
+			  	// case that requires 2 lines entry
+			  	// get path pointer
+			  	path = strstr(bp, "GET ") + 4;
+			  	printf("(1)check path: %s\n", path);
 
-		 	 //read the next line
-		  	char temp[BUFLEN];
-		  	fgets(temp, BUFLEN, readClient);
-		  
-		  	if (*temp == '\n'){
-				  break;
-		  	}
-		  	
-		  	// check if next line is valid
-		  	http = strstr(temp, "HOST: ");
-		  	if (http == NULL){
-				  // send err_msg to client
-				  send(client_sock, "Require HOST request.\n", 23, 0);
-		  	}else {
-				  http += 6;
-		 	}
-		  
-		 	// get the hostname
-		 	int hlen = strrchr(temp, '\0') - http;
-		 	hostname = malloc(hlen * sizeof(char));
-		  	strncpy(hostname, http, hlen-1);
+			 	 //read the next line
+			  	char temp[BUFLEN];
+			  	fgets(temp, BUFLEN, readClient);
+			  	strcat(buf, temp);
+			  
+			  	if (*temp == '\n'){
+					  break;
+			  	}
+			  	
+			  	// check if next line is valid
+			  	http = strstr(temp, "HOST: ");
+			  	if (http == NULL){
+					  // send err_msg to client
+					  send(client_sock, "Require HOST request.\n", 23, 0);
+			  	}else {
+					  http += 6;
+			 	}
+			  
+			 	// get the hostname
+			 	int hlen = strrchr(temp, '\0') - http;
+			 	hostname = malloc(hlen * sizeof(char));
+			  	strncpy(hostname, http, hlen-1);
 		  
 		  
 	  		}else {
@@ -379,7 +381,7 @@ void* connectClient(void* client_args){
 
   	close(readClient);
 
-    printf("Received: %s\n", buf);
+    printf("Received: \n%s\n", buf);
     pthread_exit(NULL);
 
 }
@@ -393,15 +395,6 @@ int main(int argc, char **argv) {
 
   int sd, new_sd, client_len, port, *client_sd, *server_sd;
   struct sockaddr_in server, client;
-
-  // avoid using global var so these stufffffff......
-  // int n, bytes_to_read;
-  // char *bp, buf[BUFLEN];
-
-  // not used
-  //char outbuf[BUFLEN];
-  
-  // char* err_msg;
   
   FILE *blacklist;
 
@@ -492,174 +485,6 @@ int main(int argc, char **argv) {
 			printf("Fail to join thread (%d)\n", rc);
 		}
 	}
-
-	// char* err_msg;
-	// int n, bytes_to_read;
- //  	char *bp, buf[BUFLEN];
-
- //  	memset(buf, 0, sizeof(buf));
-    
- //    if ((new_sd = accept(sd, (struct sockaddr *)&client, &client_len)) == -1) {
- //      fprintf(stderr, "Can't accept client.\n");
- //      exit(1);
- //    }
-	
-	// printf("\n-------Reserve connection-------\n\n");
-
- //    bp = buf;
- //    bytes_to_read = BUFLEN;
-	
-
- //    while((n = read(new_sd, bp, bytes_to_read)) > 0) {
- //      if (*bp == '\n') {
- //        break;
- //      }
-	  
-	//   char *checker = NULL;
-	//   char *http = NULL;
-	//   char *path = NULL;
-	//   char *ver = NULL;
-	//   char *flag = NULL;
-	  
-	//   char *hostname = NULL;
-	//   char *absPath = NULL;
-	//   char *httpVer = NULL;
-	//   char *hostport = NULL;
-	
-	  
-	//   int portNum = DEFAULT_PORT;
-	  
-	//   // get pointer to HTTPver
-	//   ver = strstr(bp, "HTTP/1.1");
-	//   checker = strstr(bp, "GET");
-	//   http = strstr(bp, "http://");
-	  
-	//   if ((checker == bp) && ver != NULL){
-		  
-	// 	  // get the HTTPver
-	// 	  int vlen = strrchr(bp, '\0') - ver - 1;
-	// 	  httpVer = malloc(vlen * sizeof(char));
-	// 	  //bzero((char*) httpVer, sizeof(httpVer));
-	// 	  strcpy(httpVer, ver);
-	// 	  httpVer[vlen] = 0;
-		  
-	// 	  if (http == NULL){
-			  
-	// 		  // case that requires 2 lines entry
-	// 		  // get path pointer
-	// 		  path = strstr(bp, "GET ") + 4;
-	// 		  bp += n;
-	// 		  bytes_to_read -= n;
-			  
-	// 		  // read the next line
-	// 		  n = read(new_sd, bp, bytes_to_read);
-			  
-	// 		  if (*bp == '\n'){
-	// 			  break;
-	// 		  }
-			  
-	// 		  // check if next line is valid
-	// 		  http = strstr(bp, "HOST: ");
-	// 		  if (http == NULL){
-	// 			  // send err_msg to client
-	// 			  send(new_sd, "Require HOST request.\n", 23, 0);
-	// 		  }else {
-	// 			  http += 6;
-	// 		  }
-			  
-	// 		  // get the hostname
-	// 		  int hlen = strrchr(bp, '\0') - http;
-	// 		  hostname = malloc(hlen * sizeof(char));
-	// 		  strncpy(hostname, http, hlen-1);
-			  
-			  
-	// 	  }else {
-			  
-	// 		  // case with full URL including host
-			  
-	// 		  // get the pointer to absPath
-	// 		  http += 7;
-	// 		  if (strstr(http, "/") > ver) {
-	// 			  path = strstr(http, " ");
-	// 		  }else {
-	// 			  path = strstr(http, "/");
-	// 		  }
-			  
-	// 		  // get the hostname
-	// 		  int hlen = (path - http)+1;
-	// 		  hostname = malloc(hlen * sizeof(char));
-	// 		  strncpy(hostname, http, hlen-1);
-			  
-	// 	  }
-		  
-	// 	  // check for port
-	// 	  flag = strstr(hostname, ":");
-	// 	  if (flag != NULL){
-	// 		  int portlen = hostname + strlen(hostname) - flag;
-	// 		  hostport = malloc(portlen * sizeof(char));
-	// 		  strncpy(hostport, flag+1, portlen);
-	// 		  if (portlen > 2){
-	// 			  portNum = atoi(hostport);
-	// 		  }
-	// 		  hostname = strtok(hostname, ":");
-	// 	  }
-	// 	  hostname[strlen(hostname)] = 0;
-		  
-	// 	  // get the absPath
-	// 	  // if it's empty, then should be "/"
-	// 	  int plen = (ver - path);
-	// 	  absPath = malloc(plen * sizeof(char));
-	// 	  //bzero((char*) absPath, sizeof(absPath));
-	// 	  strncpy(absPath, path, plen);
-	// 	  absPath[plen] = 0;
-	// 	  if (absPath[0] == ' '){
-	// 		  absPath[0] = '/';
-	// 	  }
-		  
-	// 	  printf("GET %s %s\nHOST: %s\n", absPath, httpVer, hostname);
-		  
-	// 	  // check the hostname and return 403 if it should be block
-	// 	  int contains_word = checkBlacklist(hostname, blacklist);
-
-		  
-	// 	  // call handler to connect to the host
-	// 	  if (contains_word == 0){
-	// 		  printf("call handler.");
-	// 		  handler(hostname, portNum, absPath, httpVer, new_sd);
-	// 	  } else {
-	// 		  err_msg = "HTTP/1.1 403 Forbidden.\n\n";
-	// 		  send(new_sd, err_msg, strlen(err_msg), 0);
-	// 		  printf(err_msg);
-	// 	  }
-	// 	  //handler(hostname, portNum, absPath, httpVer, new_sd);
-		  
-	// 	  // clean up (check later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
-	// 	  hostname = NULL;
-	// 	  absPath = NULL;
-	// 	  httpVer = NULL;
-		  
-	// 	  free(hostname);
-	// 	  free(absPath);
-	// 	  free(httpVer);
-	// 	  free(hostport);
-		  
-	// 	  // close connection
-	// 	  close(new_sd);
-	// 	  printf("\n-------Closing client-------\n\n\n");
-		  
-		  
-		  
-	//   } else {
-		 
-	// 	  err_msg = "HTTP/1.1 405 Method not allowed.\n\n";
-	// 	  send(new_sd, err_msg, strlen(err_msg), 0);
-	// 	  printf(err_msg);
-	// 	  printf("\n-------Closing client-------\n\n\n");
-	// 	  close(new_sd);
-	//   }
-	  
- //      bp += n;
- //      bytes_to_read -= n;
 	  
 	  
  //    }
