@@ -152,7 +152,6 @@ void handler(char *hostname, int portNum, char* absPath, char* httpVer, int new_
 			if (!(i <= 0)){
 				// print response in client
 				response[strlen(response)] = 0;
-				//send(new_hostsd, response, strlen(response), 0);
 				send(new_socket, response, strlen(response), 0);
 			}
 			// print response in server
@@ -191,6 +190,7 @@ void* connectClient(void* client_args){
 	FILE* blacklist = curr_data->blacklist;
 	int server_sock = curr_data->s_sd;
 
+	// some initialize variables
 	struct sockaddr_in client;
 	int client_len, client_sock;
 
@@ -219,7 +219,6 @@ void* connectClient(void* client_args){
   	printf("check before fgets\n");
 
   	while (fgets(bp, BUFLEN, readClient) != NULL){
-  		printf("line: %s", bp);
 
   		if (*bp == '\n'){
   			// close(client_sock);
@@ -247,63 +246,63 @@ void* connectClient(void* client_args){
 	  	checker = strstr(bp, "GET");
 	  	http = strstr(bp, "http://");
 	  
-	  		if ((checker == bp) && ver != NULL){
+  		if ((checker == bp) && ver != NULL){
+	  
+	  		// get the HTTPver
+	  		int vlen = strrchr(bp, '\0') - ver - 1;
+	  		httpVer = malloc(vlen * sizeof(char));
+	  		//bzero((char*) httpVer, sizeof(httpVer));
+	  		strcpy(httpVer, ver);
+	  		httpVer[vlen] = 0;
+	  		
+	  		if (http == NULL){
 		  
-		  		// get the HTTPver
-		  		int vlen = strrchr(bp, '\0') - ver - 1;
-		  		httpVer = malloc(vlen * sizeof(char));
-		  		//bzero((char*) httpVer, sizeof(httpVer));
-		  		strcpy(httpVer, ver);
-		  		httpVer[vlen] = 0;
+		  	// case that requires 2 lines entry
+		  	// get path pointer
+		  	path = strstr(bp, "GET ") + 4;
+		  	printf("(1)check path: %s\n", path);
+
+		 	 //read the next line
+		  	char temp[BUFLEN];
+		  	fgets(temp, BUFLEN, readClient);
+		  
+		  	if (*temp == '\n'){
+				  break;
+		  	}
+		  	
+		  	// check if next line is valid
+		  	http = strstr(temp, "HOST: ");
+		  	if (http == NULL){
+				  // send err_msg to client
+				  send(client_sock, "Require HOST request.\n", 23, 0);
+		  	}else {
+				  http += 6;
+		 	}
+		  
+		 	// get the hostname
+		 	int hlen = strrchr(temp, '\0') - http;
+		 	hostname = malloc(hlen * sizeof(char));
+		  	strncpy(hostname, http, hlen-1);
+		  
+		  
+	  		}else {
 		  		
-		  		if (http == NULL){
-			  
-			  	// case that requires 2 lines entry
-			  	// get path pointer
-			  	path = strstr(bp, "GET ") + 4;
-			  	printf("(1)check path: %s\n", path);
-	
-			 	 //read the next line
-			  	char temp[BUFLEN];
-			  	fgets(temp, BUFLEN, readClient);
-			  
-			  	if (*temp == '\n'){
-					  break;
-			  	}
-			  	
-			  	// check if next line is valid
-			  	http = strstr(temp, "HOST: ");
-			  	if (http == NULL){
-					  // send err_msg to client
-					  send(client_sock, "Require HOST request.\n", 23, 0);
-			  	}else {
-					  http += 6;
-			 	}
-			  
-			 	// get the hostname
-			 	int hlen = strrchr(temp, '\0') - http;
-			 	hostname = malloc(hlen * sizeof(char));
-			  	strncpy(hostname, http, hlen-1);
-			  
-			  
+		  		// case with full URL including host
+		  
+		  		// get the pointer to absPath
+		  		http += 7;
+		  		if (strstr(http, "/") > ver) {
+					  path = strstr(http, " ");
 		  		}else {
-			  		
-			  		// case with full URL including host
-			  
-			  		// get the pointer to absPath
-			  		http += 7;
-			  		if (strstr(http, "/") > ver) {
-						  path = strstr(http, " ");
-			  		}else {
-						  path = strstr(http, "/");
-			  		}
-			  		
-			  		// get the hostname
-			  		int hlen = (path - http)+1;
-			  		hostname = malloc(hlen * sizeof(char));
-			 		strncpy(hostname, http, hlen-1);
-			  
+					  path = strstr(http, "/");
 		  		}
+		  		
+		  		// get the hostname
+		  		int hlen = (path - http)+1;
+		  		hostname = malloc(hlen * sizeof(char));
+		 		strncpy(hostname, http, hlen-1);
+		  
+	  		}
 		  
 		  	// check for port
 		  	flag = strstr(hostname, ":");
@@ -348,7 +347,7 @@ void* connectClient(void* client_args){
 		  	//handler(hostname, portNum, absPath, httpVer, client_sock);
 		  	
 		  	// clean up (check later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
-		 	 hostname = NULL;
+		 	hostname = NULL;
 		  	absPath = NULL;
 		  	httpVer = NULL;
 		  	
@@ -377,7 +376,7 @@ void* connectClient(void* client_args){
 
   	close(readClient);
 
-    printf("Received: %s\n", stdin);
+    printf("Received: %s\n", buf);
     pthread_exit(NULL);
 
 }
