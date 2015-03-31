@@ -200,11 +200,12 @@ void* connectClient(void* client_args){
 
 	char* err_msg;
 	int n, bytes_to_read;
-  	char *bp, buf[BUFLEN];
+  	char bp[BUFLEN], buf[BUFLEN];
 
   	FILE* readClient;
 
-  	memset(buf, 0, sizeof(buf));
+  	//memset(buf, 0, sizeof(buf));
+  	*buf = *bp;
     
     if ((client_sock = accept(server_sock, (struct sockaddr *)&client, &client_len)) == -1) {
       fprintf(stderr, "Can't accept client.\n");
@@ -223,176 +224,166 @@ void* connectClient(void* client_args){
   		fprintf(stderr, "cannot read...\n");
   	}
 
-
+  	printf("check before fgets\n");
 
   	while (fgets(bp, BUFLEN, readClient) != NULL){
-  		printf("line: %s\n", bp);
+  		printf("line: %s", bp);
+
+  		if (*bp == '\n'){
+  			// close(client_sock);
+  			break;
+  		}
+
+  		printf("start reading from client (%d)\n", c_id);
+	  
+	  char *checker = NULL;
+	  char *http = NULL;
+	  char *path = NULL;
+	  char *ver = NULL;
+	  char *flag = NULL;
+	  
+	  char *hostname = NULL;
+	  char *absPath = NULL;
+	  char *httpVer = NULL;
+	  char *hostport = NULL;
+	
+	  
+	  int portNum = DEFAULT_PORT;
+	  
+	  // get pointer to HTTPver
+	  ver = strstr(bp, "HTTP/1.1");
+	  checker = strstr(bp, "GET");
+	  http = strstr(bp, "http://");
+	  
+	  if ((checker == bp) && ver != NULL){
+		  
+		  // get the HTTPver
+		  int vlen = strrchr(bp, '\0') - ver - 1;
+		  httpVer = malloc(vlen * sizeof(char));
+		  //bzero((char*) httpVer, sizeof(httpVer));
+		  strcpy(httpVer, ver);
+		  httpVer[vlen] = 0;
+		  
+		  if (http == NULL){
+			  
+			  // case that requires 2 lines entry
+			  // get path pointer
+			  path = strstr(bp, "GET ") + 4;
+
+			  //read the next line
+			  fgets(bp, BUFLEN, readClient);
+			  
+			  if (*bp == '\n'){
+				  break;
+			  }
+			  
+			  // check if next line is valid
+			  http = strstr(bp, "HOST: ");
+			  if (http == NULL){
+				  // send err_msg to client
+				  send(client_sock, "Require HOST request.\n", 23, 0);
+			  }else {
+				  http += 6;
+			  }
+			  
+			  // get the hostname
+			  int hlen = strrchr(bp, '\0') - http;
+			  hostname = malloc(hlen * sizeof(char));
+			  strncpy(hostname, http, hlen-1);
+			  
+			  
+		  }else {
+			  
+			  // case with full URL including host
+			  
+			  // get the pointer to absPath
+			  http += 7;
+			  if (strstr(http, "/") > ver) {
+				  path = strstr(http, " ");
+			  }else {
+				  path = strstr(http, "/");
+			  }
+			  
+			  // get the hostname
+			  int hlen = (path - http)+1;
+			  hostname = malloc(hlen * sizeof(char));
+			  strncpy(hostname, http, hlen-1);
+			  
+		  }
+		  
+		  // check for port
+		  flag = strstr(hostname, ":");
+		  if (flag != NULL){
+			  int portlen = hostname + strlen(hostname) - flag;
+			  hostport = malloc(portlen * sizeof(char));
+			  strncpy(hostport, flag+1, portlen);
+			  if (portlen > 2){
+				  portNum = atoi(hostport);
+			  }
+			  hostname = strtok(hostname, ":");
+		  }
+		  hostname[strlen(hostname)] = 0;
+		  
+		  // get the absPath
+		  // if it's empty, then should be "/"
+		  int plen = (ver - path);
+		  absPath = malloc(plen * sizeof(char));
+		  //bzero((char*) absPath, sizeof(absPath));
+		  strncpy(absPath, path, plen);
+		  absPath[plen] = 0;
+		  if (absPath[0] == ' '){
+			  absPath[0] = '/';
+		  }
+		  
+		  printf("GET %s %s\nHOST: %s\n", absPath, httpVer, hostname);
+		  
+		  // check the hostname and return 403 if it should be block
+		  int contains_word = checkBlacklist(hostname, blacklist);
+
+		  
+		  // call handler to connect to the host
+		  if (contains_word == 0){
+			  printf("call handler.");
+			  handler(hostname, portNum, absPath, httpVer, client_sock);
+		  } else {
+			  err_msg = "HTTP/1.1 403 Forbidden.\n\n";
+			  send(client_sock, err_msg, strlen(err_msg), 0);
+			  printf(err_msg);
+		  }
+		  //handler(hostname, portNum, absPath, httpVer, client_sock);
+		  
+		  // clean up (check later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+		  hostname = NULL;
+		  absPath = NULL;
+		  httpVer = NULL;
+		  
+		  free(hostname);
+		  free(absPath);
+		  free(httpVer);
+		  free(hostport);
+		  
+		  // close connection
+		  close(client_sock);
+		  printf("\n-------Closing client(%d)-------\n\n\n", c_id);
+		  
+		  
+		  
+	  } else {
+		 
+		  err_msg = "HTTP/1.1 405 Method not allowed.\n\n";
+		  send(client_sock, err_msg, strlen(err_msg), 0);
+		  printf("%s, (%d)", err_msg, c_id);
+		  printf("\n-------Closing client-------\n\n\n");
+		  close(client_sock);
+	  }
+
+
   	}
 
   	close(readClient);
 
-
-   //  while((n = read(client_sock, bp, bytes_to_read)) > 0) {
-   //    if (*bp == '\n') {
-   //      break;
-   //    }
-
-   //    printf("start reading from client (%d)\n", c_id);
-	  
-	  // char *checker = NULL;
-	  // char *http = NULL;
-	  // char *path = NULL;
-	  // char *ver = NULL;
-	  // char *flag = NULL;
-	  
-	  // char *hostname = NULL;
-	  // char *absPath = NULL;
-	  // char *httpVer = NULL;
-	  // char *hostport = NULL;
-	
-	  
-	  // int portNum = DEFAULT_PORT;
-	  
-	  // // get pointer to HTTPver
-	  // ver = strstr(bp, "HTTP/1.1");
-	  // checker = strstr(bp, "GET");
-	  // http = strstr(bp, "http://");
-	  
-	  // if ((checker == bp) && ver != NULL){
-		  
-		 //  // get the HTTPver
-		 //  int vlen = strrchr(bp, '\0') - ver - 1;
-		 //  httpVer = malloc(vlen * sizeof(char));
-		 //  //bzero((char*) httpVer, sizeof(httpVer));
-		 //  strcpy(httpVer, ver);
-		 //  httpVer[vlen] = 0;
-		  
-		 //  if (http == NULL){
-			  
-			//   // case that requires 2 lines entry
-			//   // get path pointer
-			//   path = strstr(bp, "GET ") + 4;
-			//   bp += n;
-			//   bytes_to_read -= n;
-			  
-			//   // read the next line
-			//   n = read(client_sock, bp, bytes_to_read);
-			  
-			//   if (*bp == '\n'){
-			// 	  break;
-			//   }
-			  
-			//   // check if next line is valid
-			//   http = strstr(bp, "HOST: ");
-			//   if (http == NULL){
-			// 	  // send err_msg to client
-			// 	  send(client_sock, "Require HOST request.\n", 23, 0);
-			//   }else {
-			// 	  http += 6;
-			//   }
-			  
-			//   // get the hostname
-			//   int hlen = strrchr(bp, '\0') - http;
-			//   hostname = malloc(hlen * sizeof(char));
-			//   strncpy(hostname, http, hlen-1);
-			  
-			  
-		 //  }else {
-			  
-			//   // case with full URL including host
-			  
-			//   // get the pointer to absPath
-			//   http += 7;
-			//   if (strstr(http, "/") > ver) {
-			// 	  path = strstr(http, " ");
-			//   }else {
-			// 	  path = strstr(http, "/");
-			//   }
-			  
-			//   // get the hostname
-			//   int hlen = (path - http)+1;
-			//   hostname = malloc(hlen * sizeof(char));
-			//   strncpy(hostname, http, hlen-1);
-			  
-		 //  }
-		  
-		 //  // check for port
-		 //  flag = strstr(hostname, ":");
-		 //  if (flag != NULL){
-			//   int portlen = hostname + strlen(hostname) - flag;
-			//   hostport = malloc(portlen * sizeof(char));
-			//   strncpy(hostport, flag+1, portlen);
-			//   if (portlen > 2){
-			// 	  portNum = atoi(hostport);
-			//   }
-			//   hostname = strtok(hostname, ":");
-		 //  }
-		 //  hostname[strlen(hostname)] = 0;
-		  
-		 //  // get the absPath
-		 //  // if it's empty, then should be "/"
-		 //  int plen = (ver - path);
-		 //  absPath = malloc(plen * sizeof(char));
-		 //  //bzero((char*) absPath, sizeof(absPath));
-		 //  strncpy(absPath, path, plen);
-		 //  absPath[plen] = 0;
-		 //  if (absPath[0] == ' '){
-			//   absPath[0] = '/';
-		 //  }
-		  
-		 //  printf("GET %s %s\nHOST: %s\n", absPath, httpVer, hostname);
-		  
-		 //  // check the hostname and return 403 if it should be block
-		 //  int contains_word = checkBlacklist(hostname, blacklist);
-
-		  
-		 //  // call handler to connect to the host
-		 //  if (contains_word == 0){
-			//   printf("call handler.");
-			//   handler(hostname, portNum, absPath, httpVer, client_sock);
-		 //  } else {
-			//   err_msg = "HTTP/1.1 403 Forbidden.\n\n";
-			//   send(client_sock, err_msg, strlen(err_msg), 0);
-			//   printf(err_msg);
-		 //  }
-		 //  //handler(hostname, portNum, absPath, httpVer, client_sock);
-		  
-		 //  // clean up (check later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
-		 //  hostname = NULL;
-		 //  absPath = NULL;
-		 //  httpVer = NULL;
-		  
-		 //  free(hostname);
-		 //  free(absPath);
-		 //  free(httpVer);
-		 //  free(hostport);
-		  
-		 //  // close connection
-		 //  close(client_sock);
-		 //  printf("\n-------Closing client(%d)-------\n\n\n", c_id);
-		  
-		  
-		  
-	  // } else {
-		 
-		 //  err_msg = "HTTP/1.1 405 Method not allowed.\n\n";
-		 //  send(client_sock, err_msg, strlen(err_msg), 0);
-		 //  printf("%s, (%d)", err_msg, c_id);
-		 //  printf("\n-------Closing client-------\n\n\n");
-		 //  close(client_sock);
-	  // }
-	  
-   //    bp += n;
-   //    bytes_to_read -= n;
-	  
-	  
-   //  }
-
     printf("Received: %s\n", buf);
-
-    
-
-pthread_exit(NULL);
+    pthread_exit(NULL);
 
 }
 
