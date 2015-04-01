@@ -47,45 +47,13 @@ int checkBlacklist(char* hostname, FILE* blacklist){
 		if (strstr(hostname, compare) != NULL){
 		  	//printf("comparing hostname. %d\n", contains_word);
 			contains_word = 1;
-			//printf("comparing hostname. (set)%d\n", contains_word);
+			printf("comparing hostname. (set)%d\n", contains_word);
 		}
 
 		compare = NULL;
 		free(compare);
 	}
-
-		  // can be deleted ↓
-
-		  // while (fgets(blbuff, BUFLEN, blacklist) != NULL){
-		  // 	//printf("check blbuff: %s", blbuff);
-		  // 	char* compare;
-		  // 	if (strstr(blbuff, "\n") != NULL){
-		  // 		int clen = strstr(blbuff, "\n") - blbuff - 1;
-		  // 		compare = malloc(clen * sizeof(char));
-		  // 		strncpy(compare, blbuff, clen);
-		  // 	} else {
-		  // 		compare = (char*) malloc(strlen(blbuff));
-		  // 		strcpy(compare, blbuff);
-		  // 	}
-		  	
-		  // 	printf("check compare: %s\n", compare);
-		  // 	printf("check lenght: %d\n", strlen(compare), compare);
-		  // 	printf("check null: %s and %s is %s\n", hostname, compare, strstr(hostname, compare));
-
-		  // 	str_to_lower(compare);
-		  // 	if (strstr(hostname, compare) != NULL){
-		  // 		printf("comparing hostname. %d\n", contains_word);
-				// contains_word = 1;
-				// printf("comparing hostname. (set)%d\n", contains_word);
-		  // 	}
-
-		  // 	compare = NULL;
-		  // 	free(compare);
-		  // }
-
-
-
-		  // set blbuff back to the start of the file
+	// set blbuff back to the start of the file
 	blbuff = NULL;
 	free(blbuff);
 	rewind(blacklist);
@@ -275,6 +243,7 @@ void* connectClient(void* client_args){
 
 	// some initialize variables
 	char* err_msg;
+	char* send_msg;
   	char bp[BUFLEN], buf[BUFLEN];
 
   	FILE* readClient;
@@ -294,7 +263,10 @@ void* connectClient(void* client_args){
 
   	printf("check before fgets\n");
 
-  	while (fgets(bp, BUFLEN, readClient) != NULL){
+  	while (1){
+  		if (fgets(bp, BUFLEN, readClient) == NULL){
+  			break;
+  		}
   		strcat(buf, bp);
 
   		if (*bp == '\n'){
@@ -303,6 +275,7 @@ void* connectClient(void* client_args){
   		}
 
   		printf("start reading from client (%d)\n", c_id);
+  		printf("-------------CURR LINE IS: %s", bp);
 	  
 	  	char *checker = NULL;
 	  	char *http = NULL;
@@ -418,8 +391,9 @@ void* connectClient(void* client_args){
 				  printf("call handler.");
 				  get_data(hostname, portNum, absPath, httpVer, client_sock);
 		  	} else {
+		  		  send_msg = "<html><body>HTTP/1.1 403 Forbidden.\n\n</body></html>";
 				  err_msg = "HTTP/1.1 403 Forbidden.\n\n";
-				  send(client_sock, err_msg, strlen(err_msg), 0);
+				  send(client_sock, send_msg, strlen(send_msg), 0);
 				  printf(err_msg);
 		  	}
 		  	//handler(hostname, portNum, absPath, httpVer, client_sock);
@@ -441,9 +415,9 @@ void* connectClient(void* client_args){
 		  
 		  
 	  	} else {
-		 
+		 	send_msg = "<html><body>HTTP/1.1 405 Method not allowed.\n\n</body></html>";
 			  err_msg = "HTTP/1.1 405 Method not allowed.\n\n";
-		 	 send(client_sock, err_msg, strlen(err_msg), 0);
+		 	 send(client_sock, send_msg, strlen(send_msg), 0);
 		 	 printf("%s, (%d)", err_msg, c_id);
 		 	 printf("\n-------Closing client-------\n\n\n");
 		 	 close(client_sock);
