@@ -69,76 +69,72 @@ void handler(char *hostname, int portNum, char* absPath, char* httpVer, int new_
 	char request[BUFLEN];
 	char response[BUFLEN];
 	struct hostent* host;
+
+	char* send_msg;
 	
 	// get the host from host name
 	host = gethostbyname(hostname);
-	// ADD AN EXCEPTION THAT RETURNS HOST INVALID !!!!!!!!!!!!!!!!!!!!!!!
-	
-	// create new socket on HOST, [port]
-	/* Bind host address to the socket */
-	memset((char *) &host_addr, 0, sizeof(struct sockaddr_in));
-	bzero((char*) &host_addr, sizeof(host_addr));
-	host_addr.sin_family = AF_INET;
-	// if port exist, use that instead of default
-	host_addr.sin_port = htons(portNum);  
-	bcopy((char*)host->h_addr,(char*)&host_addr.sin_addr.s_addr,host->h_length);
-		  
-	/* Create a stream socket. */
-	if ((hostsd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		fprintf(stderr, "Can't create host socket.\n");
-		//exit(1);
-	}
-		  
-	if ((new_hostsd = connect(hostsd, (struct sockaddr*)&host_addr, sizeof(struct sockaddr))) == -1) {
-		fprintf(stderr, "Can't connect to remote server.\n");
-		//exit(1);
-	}  
-		  
-	// send "GET absPath httpver" request to the socket
-	bzero((char*)request,sizeof(request));
-	sprintf(request, "GET %s %s\r\nHOST: %s:%d\r\n\r\n", absPath, httpVer, hostname, portNum);
-		  
-	i = send(hostsd, request, strlen(request), 0);
-	printf("\n%s\n", request);
-		  
-	if (i < 0){
-		fprintf(stderr, "Can't write to socket.\n");
+	if (host == NULL){
+		send_msg = "<html><head>HTTP/1.1 400 BAD REQUEST.\n</head></html>\n";
+		send(new_socket, send_msg, strlen(send_msg), 0);
+		fprintf(stderr, "HTTP/1.1 400 BAD REQUEST.\n");
 	} else {
-		do {
-			bzero((char*)response,strlen(response));
-			i = recv(hostsd, response, BUFLEN, 0);
-			//response[strlen(response)] = 0;
-			/*if (response == strstr(response, httpVer)){
-					  char* temp = (char*) malloc(sizeof(response));
-					  strcpy(temp, response);
-					  token = strtok(temp, " ");
-					  while( token != NULL ) {
-						  printf("try: %s\n", token);
-						  token = strtok(NULL, " ");
-					  }
-				  }*/
-			if (!(i <= 0)){
-				// print response in client
-				response[strlen(response)] = 0;
-				send(new_socket, response, strlen(response), 0);
-				if (cache_file != NULL){
-					//printf("Writing: %s\n", response);
-					fprintf(cache_file, response);
+		// create new socket on HOST, [port]
+		/* Bind host address to the socket */
+		memset((char *) &host_addr, 0, sizeof(struct sockaddr_in));
+		bzero((char*) &host_addr, sizeof(host_addr));
+		host_addr.sin_family = AF_INET;
+		// if port exist, use that instead of default
+		host_addr.sin_port = htons(portNum);  
+		bcopy((char*)host->h_addr,(char*)&host_addr.sin_addr.s_addr,host->h_length);
+
+		/* Create a stream socket. */
+		if ((hostsd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+			fprintf(stderr, "Can't create host socket.\n");
+		//exit(1);
+		}
+
+		if ((new_hostsd = connect(hostsd, (struct sockaddr*)&host_addr, sizeof(struct sockaddr))) == -1) {
+			fprintf(stderr, "Can't connect to remote server.\n");
+		//exit(1);
+		}  
+
+		// send "GET absPath httpver" request to the socket
+		bzero((char*)request,sizeof(request));
+		sprintf(request, "GET %s %s\r\nHOST: %s:%d\r\n\r\n", absPath, httpVer, hostname, portNum);
+
+		i = send(hostsd, request, strlen(request), 0);
+		printf("\n%s\n", request);
+
+		if (i < 0){
+			fprintf(stderr, "Can't write to socket.\n");
+		} else {
+			do {
+				bzero((char*)response,strlen(response));
+				i = recv(hostsd, response, BUFLEN, 0);
+				if (!(i <= 0)){
+					// print response in client
+					response[strlen(response)] = 0;
+					send(new_socket, response, strlen(response), 0);
+					if (cache_file != NULL){
+						//printf("Writing: %s\n", response);
+						fprintf(cache_file, response);
+					}
 				}
-			}
-			// print response in server
-			//printf("%s", response);
-		  
-		} while(i > 0);
-		char* ending = "\nConnection closing by server.\n";
-		send(new_socket, ending, strlen(ending), 0);
-			  
+				// print response in server
+				//printf("%s", response);
+
+			} while(i > 0);
+			char* ending = "\nConnection closing by server.\n";
+			send(new_socket, ending, strlen(ending), 0);
+
+		}
+
+
+		// close connection
+		close(hostsd);
+		close(new_hostsd);
 	}
-		  
-		  
-	// close connection
-	close(hostsd);
-	close(new_hostsd);
 	
 }
 
@@ -253,15 +249,12 @@ void* connectClient(void* client_args){
 
   	printf("so thread %d has been created ----------------------\n", c_id);
 
-  	// need to lock here?
-  	// read with fdopen? using file descriptor
+  	bzero((char*) buf, sizeof(buf));
+
   	readClient = fdopen(client_sock, "r");
-  	printf("check after readClient\n");
   	if (readClient == NULL){
   		fprintf(stderr, "cannot read...\n");
   	}
-
-  	printf("check before fgets\n");
 
   	while (1){
   		if (fgets(bp, BUFLEN, readClient) == NULL){
@@ -322,7 +315,7 @@ void* connectClient(void* client_args){
 			  	}
 			  	
 			  	// check if next line is valid
-			  	http = strstr(temp, "HOST: ");
+			  	http = strstr(temp, "Host: ");
 			  	if (http == NULL){
 					  // send err_msg to client
 					  send(client_sock, "Require HOST request.\n", 23, 0);
@@ -338,7 +331,9 @@ void* connectClient(void* client_args){
 		  
 	  		}else {
 		  		
-		  		// case with full URL including host
+		  		/* case with full(including Host field) absoluteURI in request-URI
+				 * we ignore the Host header value after it.
+		  		 */
 		  
 		  		// get the pointer to absPath
 		  		http += 7;
@@ -391,14 +386,13 @@ void* connectClient(void* client_args){
 				  printf("call handler.");
 				  get_data(hostname, portNum, absPath, httpVer, client_sock);
 		  	} else {
-		  		  send_msg = "<html><body>HTTP/1.1 403 Forbidden.\n\n</body></html>";
+		  		  send_msg = "<html><head><h1>HTTP/1.1 403 Forbidden.\n\n</h1></head></html>\n\n";
 				  err_msg = "HTTP/1.1 403 Forbidden.\n\n";
 				  send(client_sock, send_msg, strlen(send_msg), 0);
-				  printf(err_msg);
+				  fprintf(stderr, err_msg);
 		  	}
-		  	//handler(hostname, portNum, absPath, httpVer, client_sock);
 		  	
-		  	// clean up (check later!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+		  	// clean up
 		 	hostname = NULL;
 		  	absPath = NULL;
 		  	httpVer = NULL;
@@ -414,14 +408,14 @@ void* connectClient(void* client_args){
 		  
 		  
 		  
-	  	} else {
-		 	send_msg = "<html><body>HTTP/1.1 405 Method not allowed.\n\n</body></html>";
-			  err_msg = "HTTP/1.1 405 Method not allowed.\n\n";
-		 	 send(client_sock, send_msg, strlen(send_msg), 0);
-		 	 printf("%s, (%d)", err_msg, c_id);
-		 	 printf("\n-------Closing client-------\n\n\n");
-		 	 close(client_sock);
-	  	}
+		  } else {
+		  	send_msg = "<html><head>HTTP/1.1 405 Method not allowed.\n\n</head></html>\n\n";
+		  	err_msg = "HTTP/1.1 405 Method not allowed.\n\n";
+		  	send(client_sock, send_msg, strlen(send_msg), 0);
+		  	fprintf(stderr, err_msg);
+		  	printf("\n-------Closing client-------\n\n\n");
+		  	close(client_sock);
+		  }
 
 
   	}
@@ -481,71 +475,25 @@ int main(int argc, char **argv) {
   while(1){
 
   	if ((new_sd = accept(sd, (struct sockaddr *)&client, &client_len)) == -1) {
-      fprintf(stderr, "Can't accept client.\n");
-      exit(1);
-    }
-    pthread_t new_thread;
-    struct client_data c_data;
-    int rc;
-    printf("creating thread......\n");
-		c_data.thread_id = ++curr_id;
-		c_data.blacklist = blacklist;
-		c_data.s_sd = sd;
-		c_data.n_sd = new_sd;
-		c_data.client = &client;
-		c_data.client_len = client_len;
-		rc = pthread_create(&new_thread, NULL, connectClient, (void*) &c_data);
-		if (rc) {
-			printf("Fail to create thread (%d)\n", rc);
-		}
+  		fprintf(stderr, "Can't accept client.\n");
+  		exit(1);
+  	}
+  	pthread_t new_thread;
+  	struct client_data c_data;
+  	int rc;
+  	printf("creating thread......\n");
+  	c_data.thread_id = curr_id;
+  	c_data.blacklist = blacklist;
+  	c_data.s_sd = sd;
+  	c_data.n_sd = new_sd;
+  	c_data.client = &client;
+  	c_data.client_len = client_len;
+  	rc = pthread_create(&new_thread, NULL, connectClient, (void*) &c_data);
+  	if (rc) {
+  		printf("Fail to create thread (%d)\n", rc);
+  	}
+  	curr_id++;
   }
-  //while (1) {
-  /*
-  	pthread_t clientTheard[NUM_THREADS];
-  	pthread_attr_t attr;
-
-	int id;
-	server_sd = malloc(1);
-	*server_sd = sd;
-	int rc; //return code
-	void *status;
-
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-	for (id = 0; id < NUM_THREADS; id++){
-		printf("creating thread......\n");
-		cd_array[id].thread_id = id;
-		cd_array[id].blacklist = blacklist;
-		cd_array[id].s_sd = *server_sd;
-		rc = pthread_create(&clientTheard[id], &attr, connectClient, (void*) &cd_array[id]);
-		if (rc) {
-			printf("Fail to create thread (%d)\n", rc);
-		}
-	}
-
-	// join thread
-	pthread_attr_destroy(&attr);
-	for (id = 0; id<NUM_THREADS; id++){
-		rc = pthread_join(clientTheard[id], &status);
-		if (rc){
-			printf("Fail to join thread (%d)\n", rc);
-		}
-	}
-	  
-	  
- //    }
-
-    //printf("Received: %s\n", buf);
-    /* Write to socket and send to the client. */
-    //snprintf(outbuf, BUFLEN, "%d\n", (int) strlen(buf));
-    //write(new_sd, outbuf, strlen(outbuf));
-    //printf("Sent: %s\n", outbuf);
-
-    /* Clean up. */
-	//close(new_sd);
-	//printf("\n-------Closing client-------\n\n\n");
-  //}
 
   // close file blacklist
   close(blacklist);
