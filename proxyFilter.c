@@ -9,6 +9,8 @@
 #include <string.h>
 #include <pthread.h>
 
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define BUFLEN 4096
 #define LINEBUFLEN 64
@@ -41,7 +43,7 @@ int parse_client_input(char ** line_buf, char ** hostname, char ** host_port, ch
 	  	printf("No HTTP version specified.\n");
 	} else {
 		if(http != NULL){ //Absolute URI is used.
-		  	http += + 7;
+		  	http += 7;
 		  	// Get the pointer to path.
 		  	if (strstr(http, "/") > ver) {
 				path = strstr(http, " "); // Path is empty.
@@ -91,11 +93,12 @@ int parse_client_input(char ** line_buf, char ** hostname, char ** host_port, ch
 void send_and_save(int new_sd, char * message, size_t len, FILE * write_to){
 	send(new_sd, message, len, 0);
 	if (write_to != NULL){
-		fprintf(write_to,message);
+		printf("Writing to file.\n");
+		fwrite(message, 1, len, write_to);
 	}
 }
-void recv_from_host(int host_sd, int new_sd, FILE * cache_file){
-    FILE * read_host = fdopen(host_sd, "r");
+void recv_from_host(FILE * read_host, int host_sd, int new_sd, FILE * cache_file){
+    //FILE * read_host = fdopen(host_sd, "r");
     printf("After open file.\n");
 	char latest_line_read[BUFLEN];
 	int lines_read = 0;
@@ -116,7 +119,7 @@ void recv_from_host(int host_sd, int new_sd, FILE * cache_file){
 	char * response_code = strtok(latest_line_read+9, " ");
 	FILE * write_to = NULL;
 	if (response_code[0] == '2' || response_code[0] == '3'){
-		//write_to = cache_file;
+		write_to = cache_file;
 	}
 	send_and_save(new_sd, latest_line_read, strlen(latest_line_read), write_to);
 	int chunked = 0;
@@ -124,9 +127,9 @@ void recv_from_host(int host_sd, int new_sd, FILE * cache_file){
 		fgets(latest_line_read, BUFLEN, read_host);
 		printf("Line %d: %s", lines_read, latest_line_read);
 		send_and_save(new_sd, latest_line_read, strlen(latest_line_read), write_to);
-		if (strcasestr(latest_line_read, "Transfer-Encoding: chunked") == latest_line_read){
+		if (strstr(latest_line_read, "Transfer-Encoding: chunked") == latest_line_read){
 			chunked ++;
-		} else if (strcasestr(latest_line_read, "Content-Length: ") == latest_line_read){
+		} else if (strstr(latest_line_read, "Content-Length: ") == latest_line_read){
 			content_length = atoi(latest_line_read+16);
 			printf("Content len: %d\n", content_length);
 
@@ -135,6 +138,7 @@ void recv_from_host(int host_sd, int new_sd, FILE * cache_file){
 			printf("Headers ended with host sd: %d\n", host_sd);
 			break;
 		}
+
 		lines_read ++;
 		memset(latest_line_read, 0, BUFLEN);
 	}
@@ -163,8 +167,35 @@ void recv_from_host(int host_sd, int new_sd, FILE * cache_file){
 		response = (char *)malloc(content_length);
 		printf("About to read body, host_sd: %d\n", host_sd);
 		size_t recv_len = fread(response, 1, content_length, read_host);
-		send_and_save(new_sd, response, content_length, write_to);
+		printf("About to send body, host_sd: %d\n", host_sd);
+		// get cats!
+		char* img = strstr(response, "<img ");
+		printf("img: %s\n", img);
+		if (img != NULL){
+			printf("!!!!!!!!!!!!!!!check for img: %s\n", img);
+			char* src = strstr(img, "src=");
+			printf("CHECK for src after img: %s\n", src);
+			// move up to "\""
+			src += 4;
+			char* end_img = strstr(src+1, "\"");
+			printf("CHECK for end after src: %s\n", end_img);
+			char* cat_link = "\"http://thecatapi.com/api/images/get?format=src&type=gif\"";
+			char* cat_res = (char*)malloc(strlen(response) + strlen(cat_link));
+			int first = src-response;
+			strncpy(cat_res, response, first);
+			strcpy(cat_res+first, cat_link);
+			strncpy(cat_res+first+strlen(cat_link), end_img+1, strlen(end_img+1));
+			printf("\n\n\nCATCATCAT: %s\n\n\n", cat_res);
+
+			send_and_save(new_sd, cat_res, strlen(cat_res), write_to);
+
+			free(cat_res);
+		} else {
+			send_and_save(new_sd, response, content_length, write_to);
+		}
 		printf("content len: %d, recv len: %d, strlen: %d, host sd: %d\n",content_length, recv_len, strlen(response), host_sd);
+		free(response);
+
 	}
 
 	printf("Finished recieving from host.\n");
@@ -235,36 +266,41 @@ void get_data(char * hostname, char * host_port, char * absPath, int host_sd, in
 	printf("Key : %s\n", key);
 	char * hashed = get_hash(key,8);
 	printf("Hash: %s\n", hashed);
-	char * cached_fname = (char *)malloc(strlen(hashed)+11);
-	cached_fname[strlen(hashed)+10] = 0;
-	sprintf(cached_fname, "cache/%s.txt",hashed);
+	char * cached_fname = (char *)malloc(strlen(hashed)+7);
+	cached_fname[strlen(hashed)+6] = 0;
+	sprintf(cached_fname, "cache/%s",hashed);
 	printf("Cache name: %s\n", cached_fname);
-	FILE * cached = fopen(cached_fname, "r");
-	if(cached != NULL){
+	struct stat buff1;
+
+	if(stat(cached_fname, &buff1) == 0){
 		printf("Cache not NULL.\n");
+		FILE * cached = fopen(cached_fname, "r");
+		/*
 		char * buff = NULL;
 		size_t k = 0;
 		while (getline(&buff, &k, cached) != -1){
 			send(new_sd, buff, strlen(buff), 0);
 		}
-		free(buff);
+		free(buff);*/
+		recv_from_host(cached, host_sd, new_sd, NULL);
 		fclose(cached);
 	} else {
-		char * cached_temp_fname = (char *)malloc(strlen(hashed)+16);
-		cached_temp_fname[strlen(hashed)+15] = 0;
-		sprintf(cached_temp_fname, "cache/temp_%s.txt",hashed);
-		FILE * cached_temp_read = fopen(cached_temp_fname, "r");
-		if (cached_temp_read == NULL){
+		char * cached_temp_fname = (char *)malloc(strlen(hashed)+12);
+		cached_temp_fname[strlen(hashed)+11] = 0;
+		sprintf(cached_temp_fname, "cache/temp_%s",hashed);
+		//FILE * cached_temp_read = fopen(cached_temp_fname, "r");
+		struct stat buff2;
+		if (stat(cached_temp_fname, &buff2) != 0){
 			FILE * cached_temp_write = fopen(cached_temp_fname, "w");
 			printf("Cached temp NULL\n");
 			printf("%s\n", cached_temp_fname);
 
-			recv_from_host(host_sd, new_sd, cached_temp_write);
+			recv_from_host(fdopen(host_sd, "r"), host_sd, new_sd, cached_temp_write);
 			fclose(cached_temp_write);
 			rename(cached_temp_fname, cached_fname);
 			free(cached_temp_fname);
 		} else {
-			recv_from_host(host_sd, new_sd, NULL);
+			recv_from_host(fdopen(host_sd, "r"), host_sd, new_sd, NULL);
 			free(cached_temp_fname);
 		}
 	}
@@ -342,7 +378,7 @@ void * connect_to_client(void * args){
  		if (checkBlacklist(hostname, blacklist)){
  			//Forbidden.
  		} else {
-	    	printf("hostname: %s, host_port: %s, absPath: %s\n", hostname, host_port, absPath); //Malloc error here.
+	    	printf("hostname: %s, host_port: %s, absPath: %s\n", hostname, host_port, absPath);
 	    	int host_sd = connect_to_host(hostname, host_port, absPath, new_sd);
 	    	printf("Host sd: %d\n", host_sd);
 	    	if (host_sd > 0){
@@ -352,15 +388,15 @@ void * connect_to_client(void * args){
 				printf("Request: \n%s\n", request);
 				send(host_sd, request, strlen(request), 0);
 				//Send the rest of the headers to host.
-				int i = strcasestr(line_buf[1], "Host: ") == line_buf[1] ? 2 : 1; //Start sending after the host header.
+				int i = strstr(line_buf[1], "Host: ") == line_buf[1] ? 2 : 1; //Start sending after the host header.
 		    	for(;i < lines_read; i ++){
 		    		printf("Sending: %s", line_buf[i]);
 		    		send(host_sd, line_buf[i], strlen(line_buf[i]), 0);
 		    		free(line_buf[i]);
 		    	}
 		    	send(host_sd, "\r\n", 2, 0);
-		    	//get_data(hostname, host_port, absPath, host_sd, new_sd);
-		    	recv_from_host(host_sd, new_sd, NULL);
+		    	get_data(hostname, host_port, absPath, host_sd, new_sd);
+		    	//recv_from_host(host_sd, new_sd, NULL);
 	    	}
 	    }
     	free(absPath);
