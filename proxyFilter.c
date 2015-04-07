@@ -470,3 +470,36 @@ int main(int argc, char **argv) {
 	return 0;
 
 }
+(NULL, argv[1], &hints, &res)) != 0) {
+		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+		exit(1);
+	}
+
+	/*
+	Create socket for local connection and listen.
+	*/
+	sd = socket(res->ai_family, res->ai_socktype, res->ai_protocol); 
+	bind(sd, res->ai_addr, res->ai_addrlen);
+	listen(sd,5);
+	printf("After Listen.\n");
+	while (1) {
+		printf("In loop.\n");
+		if ((new_sd = accept(sd, (struct sockaddr *)&client, &client_len)) == -1) {
+			fprintf(stderr, "Can't accept client.\n");
+			exit(1);
+		}
+		pthread_t new_thread;
+		struct thread_args args;
+		args.new_sd = new_sd;
+		args.blacklist = blacklist;
+		int rc  = pthread_create(&new_thread, NULL, connect_to_client, (void *)&args);
+
+		
+		
+	}
+	freeaddrinfo(res); 
+	fclose(blacklist);
+	close(sd);
+	return 0;
+
+}
