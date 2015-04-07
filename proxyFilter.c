@@ -41,7 +41,7 @@ int parse_client_input(char ** line_buf, char ** hostname, char ** host_port, ch
 	  	printf("No HTTP version specified.\n");
 	} else {
 		if(http != NULL){ //Absolute URI is used.
-		  	http += + 7;
+		  	http += 7;
 		  	// Get the pointer to path.
 		  	if (strstr(http, "/") > ver) {
 				path = strstr(http, " "); // Path is empty.
@@ -55,7 +55,7 @@ int parse_client_input(char ** line_buf, char ** hostname, char ** host_port, ch
 			(*hostname)[hlen] = 0; 
 		} else { //Attempt to extract host from second line.
 			path = strstr(line_buf[0], "GET ") + 4;
-			*hostname = strcasestr(line_buf[1], "Host: ");
+			*hostname = strstr(line_buf[1], "Host: ");
 			if(*hostname == NULL){
 				printf("No host.\n");
 			} else {
@@ -124,9 +124,9 @@ void recv_from_host(int host_sd, int new_sd, FILE * cache_file){
 		fgets(latest_line_read, BUFLEN, read_host);
 		printf("Line %d: %s", lines_read, latest_line_read);
 		send_and_save(new_sd, latest_line_read, strlen(latest_line_read), write_to);
-		if (strcasestr(latest_line_read, "Transfer-Encoding: chunked") == latest_line_read){
+		if (strstr(latest_line_read, "Transfer-Encoding: chunked") == latest_line_read){
 			chunked ++;
-		} else if (strcasestr(latest_line_read, "Content-Length: ") == latest_line_read){
+		} else if (strstr(latest_line_read, "Content-Length: ") == latest_line_read){
 			content_length = atoi(latest_line_read+16);
 			printf("Content len: %d\n", content_length);
 
@@ -161,10 +161,36 @@ void recv_from_host(int host_sd, int new_sd, FILE * cache_file){
 		
 	} else if (content_length > 0){
 		response = (char *)malloc(content_length);
+		
 		printf("About to read body, host_sd: %d\n", host_sd);
 		size_t recv_len = fread(response, 1, content_length, read_host);
+		// get cats!
+		char* img = strstr(response, "<img ");
+		if (img != NULL){
+			printf("!!!!!!!!!!!!!!!check for img: %s\n", img);
+			char* src = strstr(img, "src=");
+			printf("CHECK for src after img: %s\n", src);
+			// move up to "\""
+			src += 4;
+			char* end_img = strstr(src+1, "\"");
+			printf("CHECK for end after src: %s\n", end_img);
+			char* cat_link = "\"http://thecatapi.com/api/images/get?format=src&type=gif\"";
+			char* cat_res = (char*)malloc(strlen(response) + strlen(cat_link));
+			int first = src-response;
+			strncpy(cat_res, response, first);
+			strcpy(cat_res+first, cat_link);
+			strncpy(cat_res+first+strlen(cat_link), end_img+1, strlen(end_img+1));
+			printf("\n\n\nCATCATCAT: %s\n\n\n", cat_res);
+
+			//send_and_save(new_sd, cat_res, strlen(cat_res), write_to);
+
+			free(cat_res);
+		//} else {
+		}
 		send_and_save(new_sd, response, content_length, write_to);
+		
 		printf("content len: %d, recv len: %d, strlen: %d, host sd: %d\n",content_length, recv_len, strlen(response), host_sd);
+		free(response);
 	}
 
 	printf("Finished recieving from host.\n");
@@ -333,6 +359,8 @@ void * connect_to_client(void * args){
 		lines_read ++;
 	}
 
+	printf("check after while reading from client\n");
+
 	char *absPath = NULL;
 	char *httpVer = NULL;
 	char *hostname = NULL;
@@ -341,6 +369,10 @@ void * connect_to_client(void * args){
  	if(parse_client_input(line_buf, &hostname, &host_port, &absPath, new_sd) == 0){
  		if (checkBlacklist(hostname, blacklist)){
  			//Forbidden.
+ 			char* send_msg = "<html><head><h1>HTTP/1.1 403 Forbidden.\n\n</h1></head></html>\n\n";
+			char* err_msg = "HTTP/1.1 403 Forbidden.\n\n";
+			send(new_sd, send_msg, strlen(send_msg), 0);
+			fprintf(stderr, err_msg);
  		} else {
 	    	printf("hostname: %s, host_port: %s, absPath: %s\n", hostname, host_port, absPath); //Malloc error here.
 	    	int host_sd = connect_to_host(hostname, host_port, absPath, new_sd);
@@ -352,7 +384,7 @@ void * connect_to_client(void * args){
 				printf("Request: \n%s\n", request);
 				send(host_sd, request, strlen(request), 0);
 				//Send the rest of the headers to host.
-				int i = strcasestr(line_buf[1], "Host: ") == line_buf[1] ? 2 : 1; //Start sending after the host header.
+				int i = strstr(line_buf[1], "Host: ") == line_buf[1] ? 2 : 1; //Start sending after the host header.
 		    	for(;i < lines_read; i ++){
 		    		printf("Sending: %s", line_buf[i]);
 		    		send(host_sd, line_buf[i], strlen(line_buf[i]), 0);
