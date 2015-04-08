@@ -352,6 +352,9 @@ int checkBlacklist(char* hostname, FILE* blacklist){
 
 	while (getline(&blbuff, &k, blacklist) != -1){
 		char* compare;
+		if (strlen(blbuff) < 2){
+			continue;
+		}
 		if (strstr(blbuff, "\n") != NULL){
 		  	int clen = strstr(blbuff, "\n") - blbuff - 1;
 		  	compare = malloc(clen * sizeof(char));
