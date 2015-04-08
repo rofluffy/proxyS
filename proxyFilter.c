@@ -15,6 +15,7 @@
 #define BUFLEN 4096
 #define LINEBUFLEN 64
 #define DEFAULT_HOST_PORT "80"
+#define USE_CATS 1
 
 
 char* str_to_lower(char* str){
@@ -37,7 +38,7 @@ int parse_client_input(char ** line_buf, char ** hostname, char ** host_port, ch
 	http = strstr(line_buf[0], "http://"); //Pointer to beggining of absolute uri
 
 	if (strncmp(line_buf[0], "GET", 3) != 0){
-	 	char *send_msg = "<html><head>HTTP/1.1 405 Method not allowed.\n\n</head></html>\n\n";
+	 	char *send_msg = "HTTP/1.1 405 Method Not Allowed \r\n\r\n <html><head><h1>405 Method Not Allowed.</h1></head><body> Proxy only accepts GET requests. </body></html>";
 	  	send(new_sd, send_msg, strlen(send_msg), 0);
 	} else if(ver == NULL){
 	  	printf("No HTTP version specified.\n");
@@ -77,12 +78,12 @@ int parse_client_input(char ** line_buf, char ** hostname, char ** host_port, ch
 		// get the absPath
 		// if it's empty, then should be "/"
 		printf("Before plen.\n");
-		int plen = ver - path - 1;
+		int plen = ver - path;
 		printf("path: %s\n", path);
 		*absPath = malloc((plen+1) * sizeof(char));
 		strncpy(*absPath, path, plen);
-		printf("absPath: %s\n", *absPath);
 		(*absPath)[plen] = 0;
+		printf("absPath: %s\n", *absPath);
 		if ((*absPath)[0] == ' '){
 			(*absPath)[0] = '/';
 		}
@@ -91,57 +92,122 @@ int parse_client_input(char ** line_buf, char ** hostname, char ** host_port, ch
 	return -1;
 }
 void send_and_save(int new_sd, char * message, size_t len, FILE * write_to){
+	printf("Sending. . .");
 	send(new_sd, message, len, 0);
+	printf("Sent message of len %d\n", len);
 	if (write_to != NULL){
 		printf("Writing to file.\n");
 		fwrite(message, 1, len, write_to);
 	}
 }
-void recv_from_host(FILE * read_host, int host_sd, int new_sd, FILE * cache_file){
+
+void recv_from_host(FILE * read_host, int host_sd, int new_sd, int cat_replace, FILE * cache_file){
     //FILE * read_host = fdopen(host_sd, "r");
     printf("After open file.\n");
 	char latest_line_read[BUFLEN];
 	int lines_read = 0;
 	size_t content_length = 0;
+	int chunked = 0;
 	char * response;
+	char * host_line_buf[BUFLEN];
 	//Read response and headers
-	//host_line_buf[0] = (char *)malloc(BUFLEN);
-	printf("Getting first line. . .");
-	fgets(latest_line_read, BUFLEN, read_host);
-	printf("done.\n");
-	if(strstr(latest_line_read, "HTTP/1.1 ") == NULL){
-		//Gateway error
+	while(lines_read < LINEBUFLEN){
+		host_line_buf[lines_read] = (char *)malloc(BUFLEN);
+		fgets(host_line_buf[lines_read], BUFLEN, read_host);
+		printf("Added to host_line_buf: %s", host_line_buf[lines_read]);
+		if (strstr(host_line_buf[lines_read], "Content-Type") == host_line_buf[lines_read] && strstr(host_line_buf[lines_read], "image") != NULL && strstr(host_line_buf[lines_read], "jpeg") == NULL && cat_replace != 0){
+			printf("GETTING CAT IMAGE\n");
+			char * response = "HTTP/1.1 301 Moved Permanently\r\nLocation: http://thecatapi.com:80/api/images/get?format=src&amp\%3btype=gif\r\n\r\n";
+			send(new_sd, response, strlen(response), 0);
+			 /*
+			char * request = "GET /api/images/get?format=src&type=gif HTTP/1.1 \r\nHost: www.thecatapi.com \r\n\r\n";
+			int cat_host_sd = connect_to_host("www.thecatapi.com", "80", "/api/images/get?format=src&type=gif", new_sd);
+			if (cat_host_sd > 0){
+				send(host_sd, request, strlen(request), 0);
+				recv_from_host(fdopen(cat_host_sd, "r"), cat_host_sd, new_sd, 0, NULL);
+			}
+			close(cat_host_sd); */
+			close(host_sd);
+			close(new_sd);
+			pthread_exit(NULL);
+			return;
+		}
+		if(host_line_buf[lines_read][0] == '\r' && host_line_buf[lines_read][1] == '\n'){
+			printf("Headers ended with host sd: %d\n", host_sd);
+			lines_read ++;
+			break;
+		}
+		lines_read ++;
+
+
+	}
+	if(strstr(host_line_buf[0], "HTTP/1.1 ") == NULL){
+		char * err = "HTTP/1.1 503 Bad Gateway \r\n\r\n <html><head><h1>503 Bad Gateway </h1></head><body> Got invalid response from server. Only HTTP/1.1 accepted. </body></html>";
+		printf("Bad Gateway: %s\n", host_line_buf[0]);
+		send(new_sd, err, strlen(err), 0);
 		return;
 	}
-	printf("Line %d: %s", lines_read, latest_line_read);
-
-	lines_read ++;
-	char * response_code = strtok(latest_line_read+9, " ");
+	char * response_code = host_line_buf[0]+9;
 	FILE * write_to = NULL;
 	if (response_code[0] == '2' || response_code[0] == '3'){
 		write_to = cache_file;
 	}
-	send_and_save(new_sd, latest_line_read, strlen(latest_line_read), write_to);
-	int chunked = 0;
-	while(lines_read < LINEBUFLEN){
-		fgets(latest_line_read, BUFLEN, read_host);
-		printf("Line %d: %s", lines_read, latest_line_read);
-		send_and_save(new_sd, latest_line_read, strlen(latest_line_read), write_to);
-		if (strstr(latest_line_read, "Transfer-Encoding: chunked") == latest_line_read){
+	int i;
+	for (i = 0; i < lines_read; ++i)
+	{
+		printf("To Client: %s", host_line_buf[i]);
+		send_and_save(new_sd, host_line_buf[i], strlen(host_line_buf[i]), write_to);
+		if (strstr(host_line_buf[i], "Transfer-Encoding: chunked") == host_line_buf[i]){
 			chunked ++;
-		} else if (strstr(latest_line_read, "Content-Length: ") == latest_line_read){
-			content_length = atoi(latest_line_read+16);
+		} else if (strstr(host_line_buf[i], "Content-Length: ") == host_line_buf[i]){
+			content_length = atoi(host_line_buf[i]+16);
 			printf("Content len: %d\n", content_length);
-
 		}
-		if(latest_line_read[0] == '\r' && latest_line_read[1] == '\n'){
+		
+	}
+	
+
+/*
+	host_line_buf[0] = (char *)malloc(BUFLEN);
+	printf("Getting first line. . .");
+	fgets(host_line_buf[lines_read], BUFLEN, read_host);
+	printf("done.\n");
+	if(strstr(host_line_buf[lines_read], "HTTP/1.1 ") == NULL){
+		char * err = "HTTP/1.1 503 Bad Gateway \r\n\r\n <html><head><h1>503 Bad Gateway </h1></head><body> Got invalid response from server. Only HTTP/1.1 accepted. </body></html>";
+		send(new_sd, err, strlen(err), 0);
+		return;
+	}
+	printf("Line %d: %s", lines_read, host_line_buf[lines_read]);
+
+	char * response_code = strtok(host_line_buf[lines_read]+9, " ");
+	printf("Response Code %s\n", response_code);
+	FILE * write_to = NULL;
+	if (response_code[0] == '2' || response_code[0] == '3'){
+		write_to = cache_file;
+	}
+	printf("About to send.\n");
+	send_and_save(new_sd, host_line_buf[lines_read], strlen(host_line_buf[lines_read]), write_to);
+	printf("sent\n");
+	int chunked = 0;
+	lines_read ++;
+	while(lines_read < LINEBUFLEN){
+		host_line_buf[lines_read] = (char *)malloc(BUFLEN);
+		fgets(host_line_buf[lines_read], BUFLEN, read_host);
+		printf("Line %d: %s", lines_read, host_line_buf[lines_read]);
+		send_and_save(new_sd, host_line_buf[lines_read], strlen(host_line_buf[lines_read]), write_to);
+		if (strstr(host_line_buf[lines_read], "Transfer-Encoding: chunked") == host_line_buf[lines_read]){
+			chunked ++;
+		} else if (strstr(host_line_buf[lines_read], "Content-Length: ") == host_line_buf[lines_read]){
+			content_length = atoi(host_line_buf[lines_read]+16);
+			printf("Content len: %d\n", content_length);
+		}
+		if(host_line_buf[lines_read][0] == '\r' && host_line_buf[lines_read][1] == '\n'){
 			printf("Headers ended with host sd: %d\n", host_sd);
 			break;
 		}
 
 		lines_read ++;
-		memset(latest_line_read, 0, BUFLEN);
-	}
+	} */
 	if (chunked == 1){
 		while(1){
 			char chunk_len_str[10];
@@ -155,7 +221,7 @@ void recv_from_host(FILE * read_host, int host_sd, int new_sd, FILE * cache_file
 			size_t chunk_read = fread(chunk, 1, chunk_len+2, read_host);
 			printf("Chunk is sent length: %d, %d\n", chunk_read, strlen(chunk));
 			//printf("Chunk:\n%s", chunk);
-			send_and_save(new_sd, chunk, chunk_read, write_to);
+			send_and_save(new_sd, chunk, chunk_len+2, write_to);
 			printf("Sent chunk\n");
 			if (chunk_len == 0){	
 				break;
@@ -166,33 +232,11 @@ void recv_from_host(FILE * read_host, int host_sd, int new_sd, FILE * cache_file
 	} else if (content_length > 0){
 		response = (char *)malloc(content_length);
 		printf("About to read body, host_sd: %d\n", host_sd);
+		printf("Content length: %d\n", content_length);
 		size_t recv_len = fread(response, 1, content_length, read_host);
 		printf("About to send body, host_sd: %d\n", host_sd);
-		// get cats!
-		char* img = strstr(response, "<img ");
-		printf("img: %s\n", img);
-		if (img != NULL){
-			printf("!!!!!!!!!!!!!!!check for img: %s\n", img);
-			char* src = strstr(img, "src=");
-			printf("CHECK for src after img: %s\n", src);
-			// move up to "\""
-			src += 4;
-			char* end_img = strstr(src+1, "\"");
-			printf("CHECK for end after src: %s\n", end_img);
-			char* cat_link = "\"http://thecatapi.com/api/images/get?format=src&type=gif\"";
-			char* cat_res = (char*)malloc(strlen(response) + strlen(cat_link));
-			int first = src-response;
-			strncpy(cat_res, response, first);
-			strcpy(cat_res+first, cat_link);
-			strncpy(cat_res+first+strlen(cat_link), end_img+1, strlen(end_img+1));
-			printf("\n\n\nCATCATCAT: %s\n\n\n", cat_res);
-
-			send_and_save(new_sd, cat_res, strlen(cat_res), write_to);
-
-			free(cat_res);
-		} else {
-			send_and_save(new_sd, response, content_length, write_to);
-		}
+		send_and_save(new_sd, response, content_length, write_to); 
+		
 		printf("content len: %d, recv len: %d, strlen: %d, host sd: %d\n",content_length, recv_len, strlen(response), host_sd);
 		free(response);
 
@@ -201,6 +245,7 @@ void recv_from_host(FILE * read_host, int host_sd, int new_sd, FILE * cache_file
 	printf("Finished recieving from host.\n");
 	close(host_sd);
 }
+
 
 int connect_to_host(char *hostname, char* host_port, char* absPath, int new_sd){
 	//Connect to host.
@@ -217,9 +262,8 @@ int connect_to_host(char *hostname, char* host_port, char* absPath, int new_sd){
 	int status;
 	if ((status = getaddrinfo(hostname, host_port, &hints, &res)) != 0) {
 		printf("BAD REQUEST\n");
-		char *send_msg = "<html><head>HTTP/1.1 400 BAD REQUEST.\n</head></html>\n";
-		send(new_sd, send_msg, strlen(send_msg), 0);
-		fprintf(stderr, "HTTP/1.1 400 BAD REQUEST.\n");
+		char * err = "HTTP/1.1 400 Bad Request \r\n\r\n <html><head><h1>400 Bad Request</h1></head></html>";
+ 		send(new_sd, err, strlen(err), 0);
 		return -1;
 	}
 	host_sd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
@@ -275,32 +319,24 @@ void get_data(char * hostname, char * host_port, char * absPath, int host_sd, in
 	if(stat(cached_fname, &buff1) == 0){
 		printf("Cache not NULL.\n");
 		FILE * cached = fopen(cached_fname, "r");
-		/*
-		char * buff = NULL;
-		size_t k = 0;
-		while (getline(&buff, &k, cached) != -1){
-			send(new_sd, buff, strlen(buff), 0);
-		}
-		free(buff);*/
-		recv_from_host(cached, host_sd, new_sd, NULL);
+		recv_from_host(cached, host_sd, new_sd, USE_CATS, NULL);
 		fclose(cached);
 	} else {
 		char * cached_temp_fname = (char *)malloc(strlen(hashed)+12);
 		cached_temp_fname[strlen(hashed)+11] = 0;
 		sprintf(cached_temp_fname, "cache/temp_%s",hashed);
-		//FILE * cached_temp_read = fopen(cached_temp_fname, "r");
 		struct stat buff2;
 		if (stat(cached_temp_fname, &buff2) != 0){
 			FILE * cached_temp_write = fopen(cached_temp_fname, "w");
 			printf("Cached temp NULL\n");
 			printf("%s\n", cached_temp_fname);
 
-			recv_from_host(fdopen(host_sd, "r"), host_sd, new_sd, cached_temp_write);
+			recv_from_host(fdopen(host_sd, "r"), host_sd, new_sd, USE_CATS, cached_temp_write);
 			fclose(cached_temp_write);
 			rename(cached_temp_fname, cached_fname);
 			free(cached_temp_fname);
 		} else {
-			recv_from_host(fdopen(host_sd, "r"), host_sd, new_sd, NULL);
+			recv_from_host(fdopen(host_sd, "r"), host_sd, new_sd, USE_CATS, NULL);
 			free(cached_temp_fname);
 		}
 	}
@@ -376,7 +412,8 @@ void * connect_to_client(void * args){
 
  	if(parse_client_input(line_buf, &hostname, &host_port, &absPath, new_sd) == 0){
  		if (checkBlacklist(hostname, blacklist)){
- 			//Forbidden.
+ 			char * err = "HTTP/1.1 403 Forbidden \r\n\r\n <html><head><h1>403 Forbidden</h1></head><body>Host name contains forbidden phrase. </body></html>";
+ 			send(new_sd, err, strlen(err), 0);
  		} else {
 	    	printf("hostname: %s, host_port: %s, absPath: %s\n", hostname, host_port, absPath);
 	    	int host_sd = connect_to_host(hostname, host_port, absPath, new_sd);
@@ -438,39 +475,6 @@ int main(int argc, char **argv) {
 
 	int status;
 	if ((status = getaddrinfo(NULL, argv[1], &hints, &res)) != 0) {
-		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-		exit(1);
-	}
-
-	/*
-	Create socket for local connection and listen.
-	*/
-	sd = socket(res->ai_family, res->ai_socktype, res->ai_protocol); 
-	bind(sd, res->ai_addr, res->ai_addrlen);
-	listen(sd,5);
-	printf("After Listen.\n");
-	while (1) {
-		printf("In loop.\n");
-		if ((new_sd = accept(sd, (struct sockaddr *)&client, &client_len)) == -1) {
-			fprintf(stderr, "Can't accept client.\n");
-			exit(1);
-		}
-		pthread_t new_thread;
-		struct thread_args args;
-		args.new_sd = new_sd;
-		args.blacklist = blacklist;
-		int rc  = pthread_create(&new_thread, NULL, connect_to_client, (void *)&args);
-
-		
-		
-	}
-	freeaddrinfo(res); 
-	fclose(blacklist);
-	close(sd);
-	return 0;
-
-}
-(NULL, argv[1], &hints, &res)) != 0) {
 		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
 		exit(1);
 	}
