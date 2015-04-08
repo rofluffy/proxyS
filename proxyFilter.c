@@ -15,7 +15,8 @@
 #define BUFLEN 4096
 #define LINEBUFLEN 64
 #define DEFAULT_HOST_PORT "80"
-#define USE_CATS 1
+#define USE_CATS 0
+#define USE_CACHE 0
 
 
 char* str_to_lower(char* str){
@@ -102,7 +103,7 @@ void send_and_save(int new_sd, char * message, size_t len, FILE * write_to){
 }
 
 void recv_from_host(FILE * read_host, int host_sd, int new_sd, int cat_replace, FILE * cache_file){
-    //FILE * read_host = fdopen(host_sd, "r");
+    //FILE * read_host =;
     printf("After open file.\n");
 	char latest_line_read[BUFLEN];
 	int lines_read = 0;
@@ -163,6 +164,7 @@ void recv_from_host(FILE * read_host, int host_sd, int new_sd, int cat_replace, 
 			content_length = atoi(host_line_buf[i]+16);
 			printf("Content len: %d\n", content_length);
 		}
+		free(host_line_buf[i]);
 		
 	}
 	
@@ -435,8 +437,11 @@ void * connect_to_client(void * args){
 		    		free(line_buf[i]);
 		    	}
 		    	send(host_sd, "\r\n", 2, 0);
-		    	get_data(hostname, host_port, absPath, host_sd, new_sd);
-		    	//recv_from_host(host_sd, new_sd, NULL);
+		    	if (USE_CACHE){
+		    		get_data(hostname, host_port, absPath, host_sd, new_sd);
+		    	} else {
+		    		recv_from_host(fdopen(host_sd, "r"), host_sd, new_sd, USE_CATS, NULL);
+		    	}
 	    	}
 	    }
     	free(absPath);
