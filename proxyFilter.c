@@ -58,7 +58,7 @@ int parse_client_input(char ** line_buf, char ** hostname, char ** host_port, ch
 			(*hostname)[hlen] = 0; 
 		} else { //Attempt to extract host from second line.
 			path = strstr(line_buf[0], "GET ") + 4;
-			*hostname = strcasestr(line_buf[1], "Host: ");
+			*hostname = strstr(str_to_lower(line_buf[1]), "host: ");
 			if(*hostname == NULL){
 				printf("No host.\n");
 			} else {
@@ -424,11 +424,11 @@ void * connect_to_client(void * args){
 	    	if (host_sd > 0){
 		    	//Send the get request and host header tohost.
 		    	char request[BUFLEN];
-				sprintf(request, "GET %s HTTP/1.1\r\nHOST: %s:%s\r\n", absPath, hostname, host_port);
+				sprintf(request, "GET %s HTTP/1.1\r\nHost: %s:%s\r\n", absPath, hostname, host_port);
 				printf("Request: \n%s\n", request);
 				send(host_sd, request, strlen(request), 0);
 				//Send the rest of the headers to host.
-				int i = strstr(line_buf[1], "Host: ") == line_buf[1] ? 2 : 1; //Start sending after the host header.
+				int i = strstr(str_to_lower(line_buf[1]), "host: ") == line_buf[1] ? 2 : 1; //Start sending after the host header.
 		    	for(;i < lines_read; i ++){
 		    		printf("Sending: %s", line_buf[i]);
 		    		send(host_sd, line_buf[i], strlen(line_buf[i]), 0);
@@ -467,6 +467,11 @@ int main(int argc, char **argv) {
 		fprintf(stderr,"Failed to open: %s\n", argv[2]);
 		exit(1);
 	}
+
+	mode_t process_mask = umask(0);
+	int result_code = mkdir("cache/", S_IRWXU | S_IRWXG | S_IRWXO);
+	umask(process_mask);
+
 	int client_len, sd, new_sd;
 	struct sockaddr_storage client;
 	struct addrinfo hints, *res;
