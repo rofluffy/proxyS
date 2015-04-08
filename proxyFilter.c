@@ -105,6 +105,7 @@ void send_and_save(int new_sd, char * message, size_t len, FILE * write_to){
 		fwrite(message, 1, len, write_to);
 	}
 }
+
 /*
 Parse and forward a HTTP response from a file.
 */
@@ -124,10 +125,7 @@ void recv_from_host(FILE * read_host, int host_sd, int new_sd, int cat_replace, 
 			break;
 		}
 		lines_read ++;
-
-
 	}
-
 	if(strstr(host_line_buf[0], "HTTP/1.1 ") == NULL){ //If first line does not start with HTTP, return error.
 		char * err = "HTTP/1.1 503 Bad Gateway \r\n\r\n <html><head><h1>503 Bad Gateway </h1></head><body> Got invalid response from server. Only HTTP/1.1 accepted. </body></html>";
 		send(new_sd, err, strlen(err), 0);
@@ -170,7 +168,48 @@ void recv_from_host(FILE * read_host, int host_sd, int new_sd, int cat_replace, 
 	} else if (content_length > 0){ //Return body of length = content_length.
 		response = (char *)malloc(content_length);
 		size_t recv_len = fread(response, 1, content_length, read_host);
-		send_and_save(new_sd, response, content_length, write_to); 
+		
+		//Scan body for pics to replace
+		char* img = strstr(response, "<img ");
+		if (img != NULL && cat_replace){
+			char * cat_response = NULL;
+			char * prev_end_img = response;
+			int size = 0;
+			while (img != NULL){
+				// move up to "\""
+				char* src = strstr(img, "src");
+				src += 3;
+				char* end_img = strstr(src, ">");
+
+				img = strstr(end_img, "<img");
+				char * end = img;
+				if (end == NULL){
+					end = strrchr(response, '\0');
+				}
+
+				int first = src - prev_end_img;
+				int second = end- end_img+1;
+
+				char* cat_link = "=\"http://thecatapi.com/api/images/get?format=src&type=gif\">";
+				if (cat_response == NULL){
+					cat_response = (char *)malloc(first + strlen(cat_link) + second);
+				} else {
+					cat_response = (char *)realloc(cat_response, size + first + strlen(cat_link) + second);
+				}
+				strncpy(cat_response+size, prev_end_img, first);
+				strcpy(cat_response+first+size, cat_link);
+				strncpy(cat_response+first+strlen(cat_link)+size, end_img+1, second);
+				size += first + strlen(cat_link) + second;
+				prev_end_img = end_img;
+
+			}
+			//printf("\n\n\nCATCATCAT: %s\n\n\n", cat_response);
+			send_and_save(new_sd, cat_response, strlen(cat_response), write_to);
+			free(cat_response);
+
+		} else { 
+			send_and_save(new_sd, response, content_length, write_to); 
+		}
 		free(response);
 	} else { //If content length is not specified, or transfer-encoding: chunked is sent more than once.
 		char * err = "HTTP/1.1 503 Bad Gateway \r\n\r\n <html><head><h1>503 Bad Gateway </h1></head><body> Length of message not specified in headers. </body></html>";
