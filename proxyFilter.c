@@ -168,48 +168,6 @@ void recv_from_host(FILE * read_host, int host_sd, int new_sd, int cat_replace, 
 		
 	}
 	
-
-/*
-	host_line_buf[0] = (char *)malloc(BUFLEN);
-	printf("Getting first line. . .");
-	fgets(host_line_buf[lines_read], BUFLEN, read_host);
-	printf("done.\n");
-	if(strstr(host_line_buf[lines_read], "HTTP/1.1 ") == NULL){
-		char * err = "HTTP/1.1 503 Bad Gateway \r\n\r\n <html><head><h1>503 Bad Gateway </h1></head><body> Got invalid response from server. Only HTTP/1.1 accepted. </body></html>";
-		send(new_sd, err, strlen(err), 0);
-		return;
-	}
-	printf("Line %d: %s", lines_read, host_line_buf[lines_read]);
-
-	char * response_code = strtok(host_line_buf[lines_read]+9, " ");
-	printf("Response Code %s\n", response_code);
-	FILE * write_to = NULL;
-	if (response_code[0] == '2' || response_code[0] == '3'){
-		write_to = cache_file;
-	}
-	printf("About to send.\n");
-	send_and_save(new_sd, host_line_buf[lines_read], strlen(host_line_buf[lines_read]), write_to);
-	printf("sent\n");
-	int chunked = 0;
-	lines_read ++;
-	while(lines_read < LINEBUFLEN){
-		host_line_buf[lines_read] = (char *)malloc(BUFLEN);
-		fgets(host_line_buf[lines_read], BUFLEN, read_host);
-		printf("Line %d: %s", lines_read, host_line_buf[lines_read]);
-		send_and_save(new_sd, host_line_buf[lines_read], strlen(host_line_buf[lines_read]), write_to);
-		if (strstr(host_line_buf[lines_read], "Transfer-Encoding: chunked") == host_line_buf[lines_read]){
-			chunked ++;
-		} else if (strstr(host_line_buf[lines_read], "Content-Length: ") == host_line_buf[lines_read]){
-			content_length = atoi(host_line_buf[lines_read]+16);
-			printf("Content len: %d\n", content_length);
-		}
-		if(host_line_buf[lines_read][0] == '\r' && host_line_buf[lines_read][1] == '\n'){
-			printf("Headers ended with host sd: %d\n", host_sd);
-			break;
-		}
-
-		lines_read ++;
-	} */
 	if (chunked == 1){
 		while(1){
 			char chunk_len_str[10];
@@ -229,7 +187,6 @@ void recv_from_host(FILE * read_host, int host_sd, int new_sd, int cat_replace, 
 				break;
 			}
 		}
-		//Get trailing headers.
 		
 	} else if (content_length > 0){
 		response = (char *)malloc(content_length);
