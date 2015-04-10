@@ -1,0 +1,91 @@
+Total before late penalty: [  /95]
+
+
+
+In the sections below if no number is entered and there is no comment, then 
+that point received full marks
+
+=== GRADE DETAILS ===
+
+
+PART 1  SIMPLE PROXY SERVER and overall functionality [ /40]
+
+[ /2] Checks return values of all system and library calls and deals
+with failures. (Typical examples are checking for null on a call to malloc, -ve values for things like accept, listen, connect, socket) 
+
+[ /1]   Uses passed in parameter to create port on to accept connection
+[ /2]    Prints the reply header (only needs to print the line with the 
+        code, but more is OK)
+[ /2]	Can properly retrieve a small page
+[ /2]	Can properly retrieve a large page that ends by a read of an EOF
+[ /3]	Can properly retrieve a page that uses content-length to specify 
+        the page length
+[ /3]	Can properly retrieve a pages that uses chunked encoding. (Make 
+        sure that the chunk sizes are passed to the client)
+[ /2]	Can retrieve a page from a server that isn't running on port 80
+
+[ /2]	Can deal with connecting to a port that doesn't support HTTP for
+        example connect to www.cs.ubc.ca:443 (Effectively results in an 
+        unexpected EOF while waiting for the reply)
+[ /2]	Can accept an improper reply without crashing (i.e. gets data but
+        not a response)  
+[ /2]	If using malloc has appropriate matching frees. 
+[ /2]	Rejects HTTP requests that are not gets
+[ /2]    Handles case when host refuses connection or the connection times
+        out
+[ /2]    Closes connection when done and does appropriate cleanup
+[ /2]	Can deal with short reads - especially while reading 
+        the request from the client and the response from the server
+[ /1]    Forwards full get request and all headers to server
+[ /1]	Handles unexpected closes (once data has started to be collected)
+[ /2]	Can deal with binary data in the response body
+[ /2]    Handles short writes
+[ /3]    Choice of algorithms, proper use of system and library calls etc.
+
+PART 2 Filtering Hosts [ /10]
+
+[ /1]	Opens filter file based on provided parameter
+[ /2]	Reads file only once, not on each accept or in each thread. 
+[ /2]	Blocks hosts identified in the blacklist with a 403
+[ /2]	Handles all lines the blacklist file 
+[ /1]	Handles an empty blacklist file.
+[ /2]	Ignores case with respect to both the host names and blacklist
+        contents
+
+Part 3: Multiple Clients [  /15]
+
+[ /3]    Creates the multiple threads and passes in parameter for the file 
+        descriptor to do the accept on
+[ /3]    Main body is responsible for creating the socket, doing the 
+        bind and the listen
+[ /2]    Threads don't end at the end of each request
+[ /2]    Main either does join on threads or infinite loop of long sleeps
+[ /5]    Multiple threads actually work (i.e. they can really operate in 
+        parallel and don't interfere with each other and they use, if needed
+        appropriate locks)     
+
+Part 4: Caching  [ /20]
+
+[/2]    Only caches results that return 200
+[/4]    Returns cached results
+[/8]    Handling of cache names
+           Deals with names that have "/" in them
+           Handles URIs that are larger than 255 
+              a) hashing, must deal with collisions
+              b) radix directory structure
+              c) Something else
+[/6]   Handles the simultaneous retrieval of the same URI - must make 
+       sure that the 2nd and later retrievals don't get an intermediate 
+       result
+
+Bonus: Pictures of cats
+[ /5]  Rewrites embedded IMG tags to show cats
+
+Miscellaneous [ /10]
+
+[ /4]  Code is appropriately commented, indented etc.
+[ /4]  Structure (decomposition into functions)
+[ /2]  Marker's discretion
+
+
+----------MARKER COMMENTS--------------
