@@ -1,4 +1,5 @@
 Total before late penalty: [90/95]
+    ***Total after 0.86% late penalty is 89.21
 
 
 
@@ -91,3 +92,4 @@ Miscellaneous [8/10]
 ----------MARKER COMMENTS--------------
 you should really print something, both errors and logs
 sometimes crashes
+
